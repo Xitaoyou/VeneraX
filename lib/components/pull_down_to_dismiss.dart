@@ -20,7 +20,25 @@ class PullDownToDismiss extends StatefulWidget {
   State<PullDownToDismiss> createState() => _PullDownToDismissState();
 }
 
-class _PullDownToDismissState extends State<PullDownToDismiss> {
+class _PullDownToDismissState extends State<PullDownToDismiss>
+    with SingleTickerProviderStateMixin {
+  late final _offset = AnimationController.unbounded(vsync: this);
+
+  @override
+  void dispose() {
+    _offset.dispose();
+    super.dispose();
+  }
+
+  Duration get _duration => MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : const Duration(milliseconds: 180);
+
+  void _restore() {
+    if (_offset.value == 0) return;
+    _offset.animateTo(0, duration: _duration, curve: Curves.easeOutCubic);
+  }
+
   final _pointers = <int>{};
   int? _pointer;
   Offset _origin = Offset.zero;
@@ -33,15 +51,17 @@ class _PullDownToDismissState extends State<PullDownToDismiss> {
       widget.enabled() &&
       (ModalRoute.of(context)?.isCurrent ?? false);
 
-  void _cancel() {
+  void _cancel({bool restore = true}) {
     _pointer = null;
     _downward = false;
+    if (restore) _restore();
   }
 
   @override
   Widget build(BuildContext context) => Listener(
     behavior: HitTestBehavior.translucent,
     onPointerDown: (event) {
+      if (_popping) return;
       _pointers.add(event.pointer);
       if (_pointers.length != 1 ||
           event.kind != PointerDeviceKind.touch ||
@@ -49,6 +69,8 @@ class _PullDownToDismissState extends State<PullDownToDismiss> {
         _cancel();
         return;
       }
+      _offset.stop();
+      _offset.value = 0;
       _pointer = event.pointer;
       _origin = event.position;
       _distance = Offset.zero;
@@ -68,8 +90,14 @@ class _PullDownToDismissState extends State<PullDownToDismiss> {
           _downward = true;
         }
       }
+      if (_downward) {
+        _offset.value =
+            (_distance.dy - 18).clamp(0.0, MediaQuery.sizeOf(context).height) *
+            0.8;
+      }
     },
     onPointerUp: (event) async {
+      if (_popping) return;
       final dismiss =
           event.pointer == _pointer &&
           _downward &&
@@ -77,20 +105,54 @@ class _PullDownToDismissState extends State<PullDownToDismiss> {
           _distance.dy >= 100 &&
           _distance.dy > _distance.dx.abs() * 2;
       _pointers.remove(event.pointer);
-      _cancel();
-      if (!dismiss) return;
+      _cancel(restore: false);
+      if (!dismiss) {
+        _restore();
+        return;
+      }
       _popping = true;
-      try {
+      final route = ModalRoute.of(context)!;
+      await _offset
+          .animateTo(
+            MediaQuery.sizeOf(context).height,
+            duration: _duration,
+            curve: Curves.easeOutCubic,
+          )
+          .orCancel
+          .catchError((Object _) {});
+      if (!mounted) return;
+      // Recheck the live policy after the exit animation, including a dialog
+      // opened while settling. maybePop still honors the route's PopScope.
+      if (widget.enabled() && route.isCurrent) {
         await Navigator.of(context).maybePop();
-      } finally {
-        if (mounted) _popping = false;
+      }
+      if (mounted && route.isCurrent) {
+        _popping = false;
+        _restore();
       }
     },
     onPointerCancel: (event) {
+      if (_popping) return;
       _pointers.remove(event.pointer);
       _cancel();
     },
-    child: widget.child,
+    child: AnimatedBuilder(
+      animation: _offset,
+      child: RepaintBoundary(child: widget.child),
+      builder: (context, child) {
+        final progress = (_offset.value / MediaQuery.sizeOf(context).height)
+            .clamp(0.0, 1.0);
+        return Transform.translate(
+          key: const ValueKey('pull-down-translation'),
+          offset: Offset(0, _offset.value),
+          transformHitTests: false,
+          child: Transform.scale(
+            scale: 1 - progress * 0.06,
+            child: Opacity(opacity: 1 - progress, child: child),
+          ),
+        );
+      },
+    ),
   );
 }
 

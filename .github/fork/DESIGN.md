@@ -17,6 +17,13 @@ Upstream: https://github.com/Kyosee/VeneraX (master)
 | Reader chapter comments or loading | Disabled |
 | A dialog / sheet covers the route | Disabled |
 
+The standalone gesture widget also owns the visual transition: a damped downward
+translation with slight scale/fade follows the finger; incomplete/canceled drags
+rebound, and accepted drags animate downward for 180ms before maybePop. It
+rechecks live policy before popping and restores the image when a PopScope
+vetoes navigation. Reduced-motion settings remove the settling animation. A
+RepaintBoundary keeps image rendering separate from animation updates.
+
 Only iOS enables this feature. It needs one downward touch gesture of at least
 100 logical pixels, with vertical displacement more than twice horizontal
 displacement. Direction locks after 18 pixels. A horizontal or upward gesture

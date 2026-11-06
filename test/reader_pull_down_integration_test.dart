@@ -50,7 +50,7 @@ void iosTestWidgets(String description, WidgetTesterCallback callback) {
 }
 
 Future<void> settleReader(WidgetTester tester) async {
-  for (var i = 0; i < 8; i++) {
+  for (var i = 0; i < 12; i++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 30)),
     );
