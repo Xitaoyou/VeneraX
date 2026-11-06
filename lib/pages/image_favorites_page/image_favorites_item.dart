@@ -32,7 +32,7 @@ class _ImageFavoritesItemState extends State<_ImageFavoritesItem> {
   }
 
   void goReaderPage(ImageFavoritesComic comic, int ep, int page) {
-    App.rootContext.to(
+    App.rootContext.toImageSurface(
       () => ReaderWithLoading(
         id: comic.id,
         sourceKey: comic.sourceKey,
@@ -43,7 +43,7 @@ class _ImageFavoritesItemState extends State<_ImageFavoritesItem> {
   }
 
   void goPhotoView(ImageFavorite imageFavorite) {
-    Navigator.of(App.rootContext).push(MaterialPageRoute(
+    Navigator.of(App.rootContext).push(imageSurfacePageRoute(preview: true, materialFallback: true,
         builder: (context) => ImageFavoritesPhotoView(
               comic: widget.imageFavoritesComic,
               imageFavorite: imageFavorite,
@@ -192,6 +192,9 @@ class _ImageFavoritesItemState extends State<_ImageFavoritesItem> {
               ),
               clipBehavior: Clip.antiAlias,
               child: Hero(
+                transitionOnUserGestures: true,
+                createRectTween: imageSurfaceRectTween,
+                flightShuttleBuilder: imageFavoriteHeroFlight,
                 tag:
                     "${image.sourceKey}${image.id}${image.ep}${image.page}",
                 child: AnimatedImage(
@@ -321,7 +324,7 @@ class _ImageFavoritesGridItem extends StatelessWidget {
   final bool multiSelectMode;
 
   void goReaderPage() {
-    App.rootContext.to(
+    App.rootContext.toImageSurface(
       () => ReaderWithLoading(
         id: comic.id,
         sourceKey: comic.sourceKey,
@@ -332,7 +335,7 @@ class _ImageFavoritesGridItem extends StatelessWidget {
   }
 
   void goPhotoView() {
-    Navigator.of(App.rootContext).push(MaterialPageRoute(
+    Navigator.of(App.rootContext).push(imageSurfacePageRoute(preview: true, materialFallback: true,
       builder: (context) => ImageFavoritesPhotoView(
         comic: comic,
         imageFavorite: image,
@@ -386,6 +389,9 @@ class _ImageFavoritesGridItem extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: Hero(
+                transitionOnUserGestures: true,
+                createRectTween: imageSurfaceRectTween,
+                flightShuttleBuilder: imageFavoriteHeroFlight,
                 tag: "${image.sourceKey}${image.id}${image.ep}${image.page}",
                 child: AnimatedImage(
                   image: ImageFavoritesProvider(image),

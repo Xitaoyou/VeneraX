@@ -945,6 +945,9 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
       onLongPress: () => _saveCover(context),
       child: Hero(
         tag: "cover${widget.heroID}",
+        transitionOnUserGestures: true,
+        createRectTween: imageSurfaceRectTween,
+                flightShuttleBuilder: imageSurfaceHeroFlight,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: SizedBox(width: width, height: width / 0.72, child: cover),
@@ -1695,7 +1698,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
       localComic: _localComic,
     );
 
-    context.to(
+    context.toImageSurface(
       () => _CoverViewer(
         imageProvider: imageProvider,
         comicId: comic.id,
@@ -1703,6 +1706,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         title: comic.title,
         heroTag: "cover${widget.heroID}",
       ),
+      preview: true,
     );
   }
 

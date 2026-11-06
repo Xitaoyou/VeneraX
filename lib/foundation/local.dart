@@ -205,7 +205,7 @@ class LocalComic with HistoryMixin implements Comic {
         }
       }
     }
-    App.rootContext.to(
+    App.rootContext.toImageSurface(
       () => Reader(
         type: comicType,
         cid: id,

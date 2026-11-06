@@ -349,7 +349,7 @@ abstract mixin class _ComicPageActions {
       history!.cover = comic.cover;
     }
     App.rootContext
-        .to(
+        .toImageSurface(
           () => Reader(
             type: comic.comicType,
             cid: comic.id,

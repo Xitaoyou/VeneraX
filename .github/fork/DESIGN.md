@@ -17,12 +17,20 @@ Upstream: https://github.com/Kyosee/VeneraX (master)
 | Reader chapter comments or loading | Disabled |
 | A dialog / sheet covers the route | Disabled |
 
-The standalone gesture widget also owns the visual transition: a damped downward
-translation with slight scale/fade follows the finger; incomplete/canceled drags
-rebound, and accepted drags animate downward for 180ms before maybePop. It
-rechecks live policy before popping and restores the image when a PopScope
-vetoes navigation. Reduced-motion settings remove the settling animation. A
-RepaintBoundary keeps image rendering separate from animation updates.
+The opt-in `ImageSurfaceRoute` owns the entire page transition. The reader,
+its image and toolbar move together with capped 80px translation and 6% scale;
+release collapses/fades the whole card in 220ms instead of moving offscreen.
+The route suppresses the previous page's secondary horizontal animation.
+Opaque overlay entries become transparent only during a drag/exit, restoring
+underlying content without keeping it painting throughout a reading session.
+
+Cover/favorite previews freeze their release transform while a Hero returns to
+the currently visible matching thumbnail. A decoded image clone keeps the flight
+stable while source/destination placeholders are installed; crop and corner
+radius interpolate continuously. Missing, clipped, offscreen or ambiguous targets
+fall back to whole-page collapse. Only the current gallery image has a Hero.
+Cancel/veto rebounds in 200ms. Reduced motion disables scale/translation and Hero
+flight. Existing tap/edge-back behavior and non-iOS route choices are retained.
 
 Only iOS enables this feature. It needs one downward touch gesture of at least
 100 logical pixels, with vertical displacement more than twice horizontal
@@ -30,7 +38,7 @@ displacement. Direction locks after 18 pixels. A horizontal or upward gesture
 cannot turn into a dismiss gesture midway. Policy and zoom are checked at
 pointer down, every move, and release; there is no persisted shadow setting.
 
-The reader integrates `PullDownToDismiss` inside its existing pointer listener,
+The reader integrates the recognition-only `PullDownToDismiss` inside its existing pointer listener,
 around the actual `_ReaderImages` subtree. Raw pointer observation is deliberate:
 a parent `GestureDetector.onVerticalDrag*` loses the gesture arena to PhotoView's
 scale recognizer, even when the picture is not zoomed. Existing tap, double tap,
@@ -84,6 +92,10 @@ to cover horizontal paging followed by dismissal, zoom/pan, pinch, cancel,
 short/upward drags, disabled policy and policy changes during a drag.
 `ios_back_swipe_zoomed_image_test.dart` retains upstream edge-back regression
 coverage; `fork_release_version_test.dart` covers same-version fork rebuilds.
+
+`image_surface_route_test.dart` uses real AppPageRoute/ImageSurfaceRoute pairs
+to check stationary backgrounds, whole-page chrome, visible/nested Hero targets,
+offscreen fallback, disposal, reduced motion and PopScope veto.
 
 Before using a new IPA as the main installation, validate on an iPhone: LTR/RTL
 page turns then down-drag; vertical reading; swipe collection and its warning;

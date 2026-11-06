@@ -17,6 +17,7 @@ import 'package:venera/foundation/history.dart';
 import 'package:venera/foundation/local.dart';
 import 'package:venera/foundation/image_provider/reader_image.dart';
 import 'package:venera/pages/reader/reader.dart';
+import 'package:venera/foundation/image_surface_route.dart';
 import 'package:venera/utils/translations.dart';
 import 'package:venera/utils/io.dart' show overrideIO;
 
@@ -163,7 +164,7 @@ void main() {
       }
     });
     nav.currentState!.push(
-      MaterialPageRoute<void>(
+      ImageSurfaceRoute<void>(
         builder: (_) => Reader(
           type: ComicType.local,
           cid: comic.id,

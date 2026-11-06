@@ -861,7 +861,7 @@ class _LocalFavoritesPageState extends State<_LocalFavoritesPage>
                       text: "Read".tl,
                       onClick: () {
                         final c = selectedItems.keys.first as FavoriteItem;
-                        App.rootContext.to(
+                        App.rootContext.toImageSurface(
                           () => ReaderWithLoading(
                             id: c.id,
                             sourceKey: c.sourceKey,
@@ -1048,7 +1048,7 @@ class _LocalFavoritesPageState extends State<_LocalFavoritesPage>
                     icon: Icons.menu_book_outlined,
                     text: "Read".tl,
                     onClick: () {
-                      App.mainNavigatorKey?.currentContext?.to(
+                      App.mainNavigatorKey?.currentContext?.toImageSurface(
                         () =>
                             ReaderWithLoading(id: c.id, sourceKey: c.sourceKey),
                       );
@@ -1080,7 +1080,7 @@ class _LocalFavoritesPageState extends State<_LocalFavoritesPage>
                   ),
                 );
               } else {
-                App.mainNavigatorKey?.currentContext?.to(
+                App.mainNavigatorKey?.currentContext?.toImageSurface(
                   () => ReaderWithLoading(id: c.id, sourceKey: c.sourceKey),
                 );
               }

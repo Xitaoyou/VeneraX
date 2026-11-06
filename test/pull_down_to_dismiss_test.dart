@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:venera/components/pull_down_to_dismiss.dart';
+import 'package:venera/foundation/image_surface_route.dart';
 
 // Real PhotoView recognizers, including the fork's gallery recognizer.
 final testImage = MemoryImage(
@@ -27,7 +28,8 @@ Future<void> openPhoto(
     ),
   );
   nav.currentState!.push(
-    MaterialPageRoute<void>(
+    ImageSurfaceRoute<void>(
+      preview: true,
       builder: (_) => Scaffold(
         body: PullDownToDismiss(
           enabled: enabled ?? () => !isPhotoViewZoomed(controller),
@@ -62,7 +64,9 @@ Future<void> openPhoto(
 
 void main() {
   double offsetOf(WidgetTester tester) => tester
-      .widget<Transform>(find.byKey(const ValueKey('pull-down-translation')))
+      .widget<Transform>(
+        find.byKey(const ValueKey('image-surface-translation')),
+      )
       .transform
       .storage[13];
 
@@ -97,7 +101,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
     expect(find.byType(PullDownToDismiss), findsOneWidget);
-    expect(offsetOf(tester), greaterThan(dragged));
+    expect(offsetOf(tester), lessThanOrEqualTo(dragged));
+    expect(offsetOf(tester), lessThanOrEqualTo(80));
     await tester.pumpAndSettle();
     expect(find.byType(PullDownToDismiss), findsNothing);
   });

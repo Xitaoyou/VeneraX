@@ -32,6 +32,7 @@ class _CoverViewerState extends State<_CoverViewer> {
           children: [
             Positioned.fill(
               child: DismissiblePhotoSurface(
+                heroTag: () => widget.heroTag,
                 canDismiss: () =>
                     appdata.settings.getReaderSetting(
                       widget.comicId,
@@ -64,7 +65,12 @@ class _CoverViewerState extends State<_CoverViewer> {
                       isAppBarShow = !isAppBarShow;
                     });
                   },
-                  heroAttributes: PhotoViewHeroAttributes(tag: widget.heroTag),
+                  heroAttributes: PhotoViewHeroAttributes(
+                    tag: widget.heroTag,
+                    transitionOnUserGestures: true,
+                    createRectTween: imageSurfaceRectTween,
+                    flightShuttleBuilder: imageSurfaceHeroFlight,
+                  ),
                 ),
               ),
             ),

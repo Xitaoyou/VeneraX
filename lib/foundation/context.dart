@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:venera/components/components.dart';
 
 import 'app_page_route.dart';
+import 'image_surface_route.dart';
+export 'image_surface_route.dart'
+    show
+        imageSurfacePageRoute,
+        imageSurfaceRectTween,
+        imageSurfaceHeroFlight,
+        imageFavoriteHeroFlight;
 
 extension Navigation on BuildContext {
   void pop<T>([T? result]) {
-    if(mounted) {
+    if (mounted) {
       Navigator.of(this).pop(result);
     }
   }
@@ -14,14 +21,28 @@ extension Navigation on BuildContext {
     return Navigator.of(this).canPop();
   }
 
-  Future<T?> to<T>(Widget Function() builder,) {
-    return Navigator.of(this).push<T>(AppPageRoute(
-        builder: (context) => builder()));
+  Future<T?> to<T>(Widget Function() builder) {
+    return Navigator.of(
+      this,
+    ).push<T>(AppPageRoute(builder: (context) => builder()));
+  }
+
+  Future<T?> toImageSurface<T>(
+    Widget Function() builder, {
+    bool preview = false,
+  }) {
+    return Navigator.of(this).push<T>(
+      imageSurfacePageRoute<T>(
+        builder: (context) => builder(),
+        preview: preview,
+      ),
+    );
   }
 
   Future<void> toReplacement<T>(Widget Function() builder) {
-    return Navigator.of(this).pushReplacement(AppPageRoute(
-        builder: (context) => builder()));
+    return Navigator.of(
+      this,
+    ).pushReplacement(AppPageRoute(builder: (context) => builder()));
   }
 
   // Aspect-scoped MediaQuery reads: MediaQuery.of would subscribe the caller

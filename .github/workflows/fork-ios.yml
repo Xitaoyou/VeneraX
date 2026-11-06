@@ -84,18 +84,21 @@ jobs:
       - name: Analyze changed integration points
         run: >-
           flutter analyze --no-pub
+          lib/foundation/image_surface_route.dart
           lib/components/pull_down_to_dismiss.dart
           lib/foundation/fork_release_version.dart
           lib/pages/reader/reader.dart
           lib/pages/comic_details_page/comic_page.dart
           lib/pages/image_favorites_page/image_favorites_page.dart
           lib/pages/settings/settings_page.dart
+          test/image_surface_route_test.dart
           test/pull_down_to_dismiss_test.dart
           test/reader_pull_down_integration_test.dart
           test/fork_release_version_test.dart
       - name: Gesture and update regressions
         run: >-
           flutter test
+          test/image_surface_route_test.dart
           test/pull_down_to_dismiss_test.dart
           test/reader_pull_down_integration_test.dart
           test/fork_release_version_test.dart

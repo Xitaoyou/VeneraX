@@ -79,9 +79,14 @@ class _ImageFavoritesPhotoViewState extends State<ImageFavoritesPhotoView> {
           isAppBarShow = !isAppBarShow;
         });
       },
-      heroAttributes: PhotoViewHeroAttributes(
-        tag: "${image.sourceKey}${image.id}${image.ep}${image.page}",
-      ),
+      heroAttributes: index == currentPage
+          ? PhotoViewHeroAttributes(
+              transitionOnUserGestures: true,
+              createRectTween: imageSurfaceRectTween,
+              flightShuttleBuilder: imageFavoriteHeroFlight,
+              tag: "${image.sourceKey}${image.id}${image.ep}${image.page}",
+            )
+          : null,
     );
   }
 
@@ -119,6 +124,10 @@ class _ImageFavoritesPhotoViewState extends State<ImageFavoritesPhotoView> {
           }
         },
         child: PullDownToDismiss(
+          heroTag: () {
+            final image = images[currentPage];
+            return '${image.sourceKey}${image.id}${image.ep}${image.page}';
+          },
           enabled: () =>
               App.isIOS &&
               appdata.settings.getReaderSetting(
@@ -258,7 +267,7 @@ class _ImageFavoritesPhotoViewState extends State<ImageFavoritesPhotoView> {
           var comic = widget.comic;
           var ep = images[currentPage].ep;
           var page = images[currentPage].page;
-          App.rootContext.to(
+          App.rootContext.toImageSurface(
             () => ReaderWithLoading(
               id: comic.id,
               sourceKey: comic.sourceKey,
