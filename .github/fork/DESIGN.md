@@ -51,6 +51,13 @@ workflow changes must be reviewed manually. The normal GitHub token can push
 application merges without modifying workflow files; the same run builds the
 merged SHA, so it does not depend on a token push triggering another workflow.
 
+The source job pins `codex/ios-build` to the build SHA before compiling. This
+keeps an existing branch reference even when master advances during a build,
+so release creation does not require an extra workflow-scoped secret under
+[GitHub's release permission rule](https://github.blog/changelog/2023-11-02-github-actions-enforcing-workflow-scope-when-creating-a-release/).
+Changes confined to fork CI/metadata do not start another expensive iOS build;
+use manual dispatch when rebuilding after such changes is necessary.
+
 Only a successful analysis, regression suite and IPA build publish a new Release.
 Failed sync or build keeps the previously released IPA available. Upstream
 semantic changes can still require manual adaptation; automatic merging is not
