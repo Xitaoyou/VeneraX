@@ -56,6 +56,10 @@ Failed sync or build keeps the previously released IPA available. Upstream
 semantic changes can still require manual adaptation; automatic merging is not
 a guarantee of future compatibility.
 
+The feed extracts privacy permissions and the bundle identifier from the built
+IPA rather than carrying an empty permission declaration. This follows the
+[AltStore source format](https://faq.altstore.io/developers/make-a-source).
+
 ## Verification
 
 `reader_pull_down_integration_test.dart` mounts the production Reader, including

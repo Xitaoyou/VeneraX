@@ -93,6 +93,8 @@ jobs:
           test/reader_pull_down_integration_test.dart
           test/fork_release_version_test.dart
           test/ios_back_swipe_zoomed_image_test.dart
+      - name: Verify update feed metadata
+        run: python3 .github/fork/test_feed.py
       - name: Build unsigned iOS app
         env:
           FORK_BUILD: ${{ github.run_number }}
