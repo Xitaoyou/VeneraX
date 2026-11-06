@@ -5,7 +5,7 @@
 /// repository link all resolve through these. Left pointing upstream, a fork
 /// would compare against upstream releases and offer the upstream build as its
 /// own update.
-const kUpdateRepoOwner = 'Kyosee';
+const kUpdateRepoOwner = 'Xitaoyou';
 const kUpdateRepoName = 'VeneraX';
 
 class AboutSettings extends StatefulWidget {
@@ -43,7 +43,7 @@ class _AboutSettingsState extends State<AboutSettings> {
         Column(
           children: [
             const SizedBox(height: 8),
-            Text("V${App.version}", style: const TextStyle(fontSize: 16)),
+            Text("V${App.version}+${App.buildNumber}", style: const TextStyle(fontSize: 16)),
             Text(
               "VeneraX is a free and open-source, multi-platform comic reader forked from Venera and maintained with enhancements over the original.".tl,
               textAlign: TextAlign.center,
@@ -180,7 +180,7 @@ Future<_GitHubRelease> _fetchLatestRelease(_GithubUpdateConfig config) async {
   if (data is! Map) throw Exception("Invalid release response".tl);
   var map = Map<String, dynamic>.from(data);
   var tag = map['tag_name']?.toString() ?? "";
-  var version = _normalizeVersion(tag);
+  var version = tag.trim().replaceFirst(RegExp(r'^[vV]'), '');
   var htmlUrl = map['html_url']?.toString() ??
       "https://github.com/${config.owner}/${config.repo}/releases";
   var assets = <_GitHubAsset>[];
@@ -215,7 +215,9 @@ Future<_GitHubRelease> _fetchLatestRelease(_GithubUpdateConfig config) async {
 Future<_UpdateCheckResult> _checkUpdateDetails() async {
   var config = _readGithubUpdateConfig();
   var release = await _fetchLatestRelease(config);
-  var hasUpdate = _compareVersion(release.version, App.version);
+  var hasUpdate = isForkReleaseNewer(
+    release.tag, '${App.version}+${App.buildNumber}',
+  );
   return _UpdateCheckResult(hasUpdate: hasUpdate, release: release, config: config);
 }
 
@@ -299,7 +301,7 @@ Future<void> checkUpdateUi([
               children: [
                 Text("A new version is available. Do you want to update now?".tl),
                 const SizedBox(height: 8),
-                Text("Current version: @v".tlParams({"v": App.version})),
+                Text("Current version: @v".tlParams({"v": "${App.version}+${App.buildNumber}"})),
                 Text("Latest version: @v"
                     .tlParams({"v": value.release!.version})),
                 if (changelog.isNotEmpty) ...[
@@ -790,32 +792,6 @@ _GitHubAsset? _selectWindowsAsset(List<_GitHubAsset> assets) {
     }
   }
   return bestInstaller;
-}
-
-// --- Version utilities ---
-
-String _normalizeVersion(String version) {
-  var result = version.trim();
-  if (result.startsWith("v") || result.startsWith("V")) {
-    result = result.substring(1);
-  }
-  result = result.split("+").first;
-  result = result.split("-").first;
-  return result;
-}
-
-/// return true if version1 > version2
-bool _compareVersion(String version1, String version2) {
-  var v1 = _normalizeVersion(version1).split(".");
-  var v2 = _normalizeVersion(version2).split(".");
-  final length = v1.length > v2.length ? v1.length : v2.length;
-  for (var i = 0; i < length; i++) {
-    final value1 = i < v1.length ? int.tryParse(v1[i]) ?? 0 : 0;
-    final value2 = i < v2.length ? int.tryParse(v2[i]) ?? 0 : 0;
-    if (value1 > value2) return true;
-    if (value1 < value2) return false;
-  }
-  return false;
 }
 
 /// Renders changelog entries as a scrollable bullet list, one entry per line.

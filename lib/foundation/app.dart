@@ -24,6 +24,8 @@ class _App {
 
   String get version => _version;
 
+  String buildNumber = '0';
+
   bool get isWeb => kIsWeb;
 
   bool get isAndroid =>
@@ -106,6 +108,7 @@ class _App {
     try {
       final info = await PackageInfo.fromPlatform();
       _version = info.version;
+      buildNumber = info.buildNumber;
     } catch (_) {}
     isInitialized = true;
   }

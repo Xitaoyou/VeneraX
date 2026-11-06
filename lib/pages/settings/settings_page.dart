@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:uuid/uuid.dart';
 import 'package:venera/components/components.dart';
 import 'package:venera/foundation/app.dart';
+import 'package:venera/foundation/fork_release_version.dart';
 import 'package:venera/foundation/appdata.dart';
 import 'package:venera/foundation/auto_page_turning.dart';
 import 'package:venera/foundation/battery_optimization.dart';

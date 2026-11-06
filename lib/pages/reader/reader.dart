@@ -14,6 +14,7 @@ import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:venera/components/components.dart';
+import 'package:venera/components/pull_down_to_dismiss.dart';
 import 'package:venera/components/custom_slider.dart';
 import 'package:venera/components/rich_comment_content.dart';
 import 'package:venera/components/window_frame.dart';

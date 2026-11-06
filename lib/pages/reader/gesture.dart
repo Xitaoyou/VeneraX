@@ -151,7 +151,19 @@ class _ReaderGestureDetectorState
       // the screen's left edge until the image is zoomed out again.
       child: SwipeRegionMarker(
         active: () => reader._imageViewController?.isImageZoomed ?? false,
-        child: widget.child,
+        child: PullDownToDismiss(
+          // Observe raw pointer events: PhotoView's scale recognizer wins the
+          // gesture arena even on an unzoomed horizontal reader.
+          enabled: () =>
+              App.isIOS &&
+              !reader.isLoading &&
+              !reader.isOnChapterCommentsPage &&
+              reader.mode != ReaderMode.galleryTopToBottom &&
+              reader.mode != ReaderMode.continuousTopToBottom &&
+              reader.effectiveSetting('quickCollectImage') != 'Swipe' &&
+              !(reader._imageViewController?.isImageZoomed ?? false),
+          child: widget.child,
+        ),
       ),
     );
   }

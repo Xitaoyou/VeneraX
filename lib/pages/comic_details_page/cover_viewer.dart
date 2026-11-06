@@ -5,11 +5,15 @@ class _CoverViewer extends StatefulWidget {
     required this.imageProvider,
     required this.title,
     required this.heroTag,
+    required this.comicId,
+    required this.sourceKey,
   });
 
   final ImageProvider imageProvider;
   final String title;
   final String heroTag;
+  final String comicId;
+  final String sourceKey;
 
   @override
   State<_CoverViewer> createState() => _CoverViewerState();
@@ -27,31 +31,41 @@ class _CoverViewerState extends State<_CoverViewer> {
         body: Stack(
           children: [
             Positioned.fill(
-              child: PhotoView(
-                imageProvider: widget.imageProvider,
-                minScale: PhotoViewComputedScale.contained * 1.0,
-                maxScale: PhotoViewComputedScale.covered * 3.0,
-                backgroundDecoration: BoxDecoration(
-                  color: context.colorScheme.surface,
-                ),
-                loadingBuilder: (context, event) => Center(
-                  child: SizedBox(
-                    width: 24.0,
-                    height: 24.0,
-                    child: CircularProgressIndicator(
-                      value: event == null || event.expectedTotalBytes == null
-                          ? null
-                          : event.cumulativeBytesLoaded /
-                                event.expectedTotalBytes!,
+              child: DismissiblePhotoSurface(
+                canDismiss: () =>
+                    appdata.settings.getReaderSetting(
+                      widget.comicId,
+                      widget.sourceKey,
+                      'quickCollectImage',
+                    ) !=
+                    'Swipe',
+                builder: (controller) => PhotoView(
+                  controller: controller,
+                  imageProvider: widget.imageProvider,
+                  minScale: PhotoViewComputedScale.contained * 1.0,
+                  maxScale: PhotoViewComputedScale.covered * 3.0,
+                  backgroundDecoration: BoxDecoration(
+                    color: context.colorScheme.surface,
+                  ),
+                  loadingBuilder: (context, event) => Center(
+                    child: SizedBox(
+                      width: 24.0,
+                      height: 24.0,
+                      child: CircularProgressIndicator(
+                        value: event == null || event.expectedTotalBytes == null
+                            ? null
+                            : event.cumulativeBytesLoaded /
+                                  event.expectedTotalBytes!,
+                      ),
                     ),
                   ),
+                  onTapUp: (context, details, controllerValue) {
+                    setState(() {
+                      isAppBarShow = !isAppBarShow;
+                    });
+                  },
+                  heroAttributes: PhotoViewHeroAttributes(tag: widget.heroTag),
                 ),
-                onTapUp: (context, details, controllerValue) {
-                  setState(() {
-                    isAppBarShow = !isAppBarShow;
-                  });
-                },
-                heroAttributes: PhotoViewHeroAttributes(tag: widget.heroTag),
               ),
             ),
             AnimatedPositioned(
@@ -130,7 +144,10 @@ class _CoverViewerState extends State<_CoverViewer> {
 
       final data = await completer.future;
       final fileType = detectFileType(data);
-      await saveFile(filename: "cover_${widget.title}${fileType.ext}", data: data);
+      await saveFile(
+        filename: "cover_${widget.title}${fileType.ext}",
+        data: data,
+      );
     } catch (e) {
       if (mounted) {
         context.showMessage(message: "Error".tl);

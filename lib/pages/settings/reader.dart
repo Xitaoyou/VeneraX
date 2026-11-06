@@ -866,10 +866,23 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                 },
                 onChanged: () {
                   widget.onChanged?.call("quickCollectImage");
+                  if (App.isIOS &&
+                      _effectiveSetting('quickCollectImage') == 'Swipe') {
+                    context.showMessage(
+                      message:
+                          'Swipe collection is enabled. Pull down to go back is disabled in the reader and image previews.'
+                              .tl,
+                    );
+                  }
                 },
                 help:
                     "On the image browsing page, you can quickly collect images by sliding horizontally or vertically according to your reading mode"
-                        .tl,
+                        .tl +
+                    (App.isIOS
+                        ? '\n' +
+                              'Swipe collection disables pull down to go back in the reader and image previews.'
+                                  .tl
+                        : ''),
                 comicId: isEnabledSpecificSettings ? widget.comicId : null,
                 comicSource: isEnabledSpecificSettings
                     ? widget.comicSource

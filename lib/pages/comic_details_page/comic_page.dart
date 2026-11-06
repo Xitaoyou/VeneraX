@@ -7,6 +7,7 @@ import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:sliver_tools/sliver_tools.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:venera/components/components.dart';
+import 'package:venera/components/pull_down_to_dismiss.dart';
 import 'package:venera/components/related_sources_dialog.dart';
 import 'package:venera/components/rich_comment_content.dart';
 import 'package:venera/foundation/app.dart';
@@ -1697,6 +1698,8 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
     context.to(
       () => _CoverViewer(
         imageProvider: imageProvider,
+        comicId: comic.id,
+        sourceKey: comic.sourceKey,
         title: comic.title,
         heroTag: "cover${widget.heroID}",
       ),

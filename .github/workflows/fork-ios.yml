@@ -1,0 +1,129 @@
+name: Fork iOS
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-ios
+  cancel-in-progress: false
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      build: ${{ steps.source.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: master
+      - id: source
+        shell: bash
+        env:
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          set -euo pipefail
+          before=$(git rev-parse HEAD)
+          if [ "$SCHEDULED" = true ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git fetch https://github.com/Kyosee/VeneraX.git master
+            upstream=$(git rev-parse FETCH_HEAD)
+            if ! git merge-base --is-ancestor "$upstream" HEAD; then
+              git merge --no-commit --no-ff "$upstream" || true
+              # Fork-owned CI must survive upstream CI changes. Application
+              # conflicts remain unresolved and fail the job for manual review.
+              git restore --source=HEAD --staged --worktree -- .github
+              if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+                git diff --name-only --diff-filter=U
+                git merge --abort
+                exit 1
+              fi
+              test -f .git/MERGE_HEAD
+              git commit -m "Merge Kyosee/VeneraX master into personal iOS fork"
+              git push origin HEAD:master
+            fi
+          fi
+          after=$(git rev-parse HEAD)
+          echo "sha=$after" >> "$GITHUB_OUTPUT"
+          if [ "$SCHEDULED" != true ] || [ "$before" != "$after" ]; then
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: source
+    if: needs.source.outputs.build == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          architecture: x64
+          cache: true
+      - run: sudo xcode-select --switch /Applications/Xcode_16.4.app
+      - run: flutter pub get
+      - name: Analyze changed integration points
+        run: >-
+          flutter analyze --no-pub
+          lib/components/pull_down_to_dismiss.dart
+          lib/foundation/fork_release_version.dart
+          lib/pages/reader/reader.dart
+          lib/pages/comic_details_page/comic_page.dart
+          lib/pages/image_favorites_page/image_favorites_page.dart
+          lib/pages/settings/settings_page.dart
+          test/pull_down_to_dismiss_test.dart
+          test/reader_pull_down_integration_test.dart
+          test/fork_release_version_test.dart
+      - name: Gesture and update regressions
+        run: >-
+          flutter test
+          test/pull_down_to_dismiss_test.dart
+          test/reader_pull_down_integration_test.dart
+          test/fork_release_version_test.dart
+          test/ios_back_swipe_zoomed_image_test.dart
+      - name: Build unsigned iOS app
+        env:
+          FORK_BUILD: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)
+          version=${version%%+*}
+          build=$((10000 + FORK_BUILD))
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "BUILD=$build" >> "$GITHUB_ENV"
+          echo "TAG=v$version+$build" >> "$GITHUB_ENV"
+          flutter build ios --release --no-codesign --build-name="$version" --build-number="$build"
+          mkdir -p result/Payload
+          cp -R build/ios/iphoneos/Runner.app result/Payload/
+          cd result
+          zip -qr "VeneraX-ios-$version+$build.ipa" Payload
+          shasum -a 256 *.ipa > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fork-ios
+          path: |
+            result/*.ipa
+            result/SHA256SUMS
+          if-no-files-found: error
+      - name: Publish only verified fork build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/fork/make_feed.py
+          gh release create "$TAG" result/*.ipa result/SHA256SUMS result/altstore-source.json \
+            --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --latest \
+            --title "VeneraX $VERSION · personal iOS build $BUILD" \
+            --notes-file .github/fork/release-notes.md

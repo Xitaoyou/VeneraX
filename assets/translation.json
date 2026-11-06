@@ -1,5 +1,7 @@
 {
   "zh_CN": {
+    "Swipe collection disables pull down to go back in the reader and image previews.": "开启滑动收藏后，漫画阅读器和图片预览中的下滑返回将停用。",
+    "Swipe collection is enabled. Pull down to go back is disabled in the reader and image previews.": "已开启滑动收藏，漫画阅读器和图片预览中的下滑返回已停用。",
     "Current comic": "当前漫画",
     "This device": "本设备",
     "Inherited from this device": "继承本设备设置",
@@ -1571,6 +1573,8 @@
     "Undo page shift": "取消错开"
   },
   "zh_TW": {
+    "Swipe collection disables pull down to go back in the reader and image previews.": "開啟滑動收藏後，漫畫閱讀器和圖片預覽中的下滑返回將停用。",
+    "Swipe collection is enabled. Pull down to go back is disabled in the reader and image previews.": "已開啟滑動收藏，漫畫閱讀器和圖片預覽中的下滑返回已停用。",
     "Current comic": "目前漫畫",
     "This device": "本裝置",
     "Inherited from this device": "沿用本裝置設定",
