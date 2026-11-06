@@ -70,8 +70,11 @@ The source job pins `codex/ios-build` to the build SHA before compiling. This
 keeps an existing branch reference even when master advances during a build,
 so release creation does not require an extra workflow-scoped secret under
 [GitHub's release permission rule](https://github.blog/changelog/2023-11-02-github-actions-enforcing-workflow-scope-when-creating-a-release/).
-Changes confined to fork CI/metadata do not start another expensive iOS build;
-use manual dispatch when rebuilding after such changes is necessary.
+Changes confined to fork metadata do not start another expensive iOS build;
+workflow changes do trigger a build so runner/toolchain fixes are validated.
+The build pins the standard `macos-15-intel` runner (Flutter x64, Xcode 16.4).
+The generic `macos-15` ARM pool previously canceled a build after failing to
+allocate a hosted runner; using the Intel label avoids that specific pool.
 
 Only a successful analysis, regression suite and IPA build publish a new Release.
 Failed sync or build keeps the previously released IPA available. Upstream

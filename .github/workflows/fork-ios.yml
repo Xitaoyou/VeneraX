@@ -4,7 +4,6 @@ on:
     branches: [master]
     paths-ignore:
       - '.github/fork/**'
-      - '.github/workflows/fork-ios.yml'
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
@@ -67,7 +66,8 @@ jobs:
   build:
     needs: source
     if: needs.source.outputs.build == 'true'
-    runs-on: macos-15
+    # Explicit Intel pool avoids the macOS ARM capacity queue. Flutter is x64.
+    runs-on: macos-15-intel
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
