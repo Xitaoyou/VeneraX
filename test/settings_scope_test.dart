@@ -77,25 +77,39 @@ void main() {
     },
   );
 
-  testWidgets('chapter-end options follow device mode instead of global mode', (
-    tester,
-  ) async {
-    appdata.settings.setEnabledDeviceSpecificSettings(true);
-    appdata.settings.setDeviceReaderSetting('readerMode', 'galleryLeftToRight');
-    await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: ReaderSettings())),
-    );
-    await tester.pumpAndSettle();
-    final display = find.text('Display settings');
-    await tester.scrollUntilVisible(
-      display,
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(display);
-    await tester.pumpAndSettle();
-    expect(find.text('Show Comments at Chapter End'), findsOneWidget);
-  });
+  for (final (mode, hasEndSwitch) in [
+    ('galleryLeftToRight', true),
+    ('galleryRightToLeft', true),
+    ('galleryTopToBottom', false),
+    ('continuousTopToBottom', false),
+    ('continuousLeftToRight', false),
+    ('continuousRightToLeft', false),
+  ]) {
+    testWidgets('chapter-end options follow device mode $mode', (tester) async {
+      appdata.settings['readerMode'] = hasEndSwitch
+          ? 'continuousTopToBottom'
+          : 'galleryLeftToRight';
+      appdata.settings.setEnabledDeviceSpecificSettings(true);
+      appdata.settings.setDeviceReaderSetting('readerMode', mode);
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: ReaderSettings())),
+      );
+      await tester.pumpAndSettle();
+      final display = find.text('Display settings');
+      await tester.scrollUntilVisible(
+        display,
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(display);
+      await tester.pumpAndSettle();
+      expect(find.text('Show Chapter Comments'), findsOneWidget);
+      expect(
+        find.text('Show Comments at Chapter End'),
+        hasEndSwitch ? findsOneWidget : findsNothing,
+      );
+    });
+  }
 
   for (final (mode, first) in [
     ('galleryRightToLeft', 'Right half first'),

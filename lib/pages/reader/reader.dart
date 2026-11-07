@@ -51,6 +51,7 @@ import 'package:venera/network/download.dart';
 import 'package:venera/network/images.dart';
 import 'package:venera/pages/reader/auto_scroll_activity.dart';
 import 'package:venera/pages/reader/continuous_page_turn_coordinator.dart';
+import 'package:venera/pages/reader/night_mode_button.dart';
 import 'package:venera/pages/reader/shader_image.dart';
 import 'package:venera/pages/settings/settings_page.dart';
 import 'package:venera/utils/clipboard_image.dart';
@@ -231,21 +232,16 @@ class _ReaderState extends State<Reader>
         mode != ReaderMode.galleryRightToLeft) {
       return false;
     }
+    return showChapterCommentsAtEnd;
+  }
+
+  bool get showChapterCommentsAtEnd {
     if (widget.chapters == null) return false;
     var source = ComicSource.find(type.sourceKey);
     if (source?.chapterCommentsLoader == null) return false;
-    return appdata.settings.getReaderSetting(
-              cid,
-              type.sourceKey,
-              'showChapterComments',
-            ) ==
-            true &&
-        appdata.settings.getReaderSetting(
-              cid,
-              type.sourceKey,
-              'showChapterCommentsAtEnd',
-            ) ==
-            true;
+    return effectiveSetting('showChapterComments') == true &&
+        (mode.isContinuous ||
+            effectiveSetting('showChapterCommentsAtEnd') == true);
   }
 
   @override
