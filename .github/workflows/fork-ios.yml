@@ -2,8 +2,6 @@ name: Fork iOS
 on:
   push:
     branches: [master]
-    paths-ignore:
-      - '.github/fork/**'
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
@@ -26,10 +24,14 @@ jobs:
         with:
           fetch-depth: 0
           ref: master
+      - name: Verify IPA build filter
+        run: python3 .github/fork/test_should_build.py
       - id: source
         shell: bash
         env:
           SCHEDULED: ${{ github.event_name == 'schedule' }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           before=$(git rev-parse HEAD)
@@ -55,12 +57,20 @@ jobs:
           fi
           after=$(git rev-parse HEAD)
           echo "sha=$after" >> "$GITHUB_OUTPUT"
-          if [ "$SCHEDULED" != true ] || [ "$before" != "$after" ]; then
+          if [ "$EVENT_NAME" = push ]; then
+            before=$PUSH_BEFORE
+          fi
+          force=()
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            force=(--force)
+          fi
+          build=$(python3 .github/fork/should_build.py --base "$before" --head "$after" "${force[@]}")
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          if [ "$build" = true ]; then
             # Keep a branch ref on the exact build SHA until publication.
             # A later master push must not invalidate release creation when
             # this commit changes workflow files (GitHub workflow-scope rule).
             git push origin HEAD:refs/heads/codex/ios-build
-            echo 'build=true' >> "$GITHUB_OUTPUT"
           fi
 
   build:

@@ -70,8 +70,13 @@ The source job pins `codex/ios-build` to the build SHA before compiling. This
 keeps an existing branch reference even when master advances during a build,
 so release creation does not require an extra workflow-scoped secret under
 [GitHub's release permission rule](https://github.blog/changelog/2023-11-02-github-actions-enforcing-workflow-scope-when-creating-a-release/).
-Changes confined to fork metadata do not start another expensive iOS build;
-workflow changes do trigger a build so runner/toolchain fixes are validated.
+Every push runs the lightweight source job. `should_build.py` compares the
+push's previous SHA, or a scheduled merge's before/after SHAs. Changes confined
+to root README/CHANGELOG and project policy/license documents, root AltStore
+manifests, or fork design/release notes skip the expensive IPA build. They still
+merge normally. Bundled `doc/*.md`, assets, application code, dependencies,
+workflow and publishing scripts all trigger builds; unknown paths or missing
+baselines conservatively build. Manual dispatch always forces a build.
 The build pins the standard `macos-15-intel` runner (Flutter x64, Xcode 16.4).
 The generic `macos-15` ARM pool previously canceled a build after failing to
 allocate a hosted runner; using the Intel label avoids that specific pool.

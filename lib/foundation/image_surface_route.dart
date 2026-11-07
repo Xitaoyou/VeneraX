@@ -230,7 +230,9 @@ class ImageSurfaceRoute<T> extends PageRoute<T> {
   ) => Semantics(
     scopesRoute: true,
     explicitChildNodes: true,
-    child: _page ??= builder(context),
+    // Match AppPageRoute's Material ancestor. Upstream reader controls (such
+    // as Slider) rely on it even when the page has no Material Scaffold.
+    child: _page ??= Material(child: Builder(builder: builder)),
   );
 
   @override
