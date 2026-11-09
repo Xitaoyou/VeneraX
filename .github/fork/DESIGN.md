@@ -46,6 +46,17 @@ long press, horizontal paging, collection and edge-back handling remain with
 their original recognizers. Preview controllers also use their actual initial
 scale, rather than treating scale=1 as the fit size.
 
+## Comic tile back gestures
+
+On iOS, a closed SwipeActionTile yields rightward drags over its cover and text
+as well as empty space to the page back recognizer. Leftward drags still reveal
+favorite/collection actions. A pane already open at touch down keeps horizontal
+drags so a right swipe closes it rather than leaving the page. The state is
+sampled at pointer down because Slidable can update its ratio before the route
+recognizer receives the first move. Closed tiles with a leading action also
+prioritize page back on iOS; other platforms retain their existing swipe actions.
+Zoomed reader images and other horizontal surfaces retain their existing markers.
+
 ## Updating and upstream merges
 
 Manual checks and startup checks share `checkUpdateUi` and the fork repository

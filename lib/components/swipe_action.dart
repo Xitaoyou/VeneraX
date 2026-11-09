@@ -37,9 +37,9 @@ class SwipePane {
     this.extentRatio = 0.28,
     this.dismissThreshold = 0.55,
   }) : assert(
-          !dismissOnFullSwipe || onFullSwipe != null,
-          'dismissOnFullSwipe requires onFullSwipe',
-        );
+         !dismissOnFullSwipe || onFullSwipe != null,
+         'dismissOnFullSwipe requires onFullSwipe',
+       );
 
   /// Actions revealed by a light swipe. Each is tap-to-execute.
   final List<SwipeAction> actions;
@@ -72,7 +72,7 @@ class SwipePane {
 /// - light swipe reveals one or more tap-to-run actions;
 /// - large swipe auto-runs a primary action (opt in via
 ///   [SwipePane.dismissOnFullSwipe]).
-class SwipeActionTile extends StatelessWidget {
+class SwipeActionTile extends StatefulWidget {
   const SwipeActionTile({
     super.key,
     required this.child,
@@ -91,6 +91,21 @@ class SwipeActionTile extends StatelessWidget {
 
   /// Slidables sharing a tag auto-close when another in the group opens.
   final Object groupTag;
+
+  @override
+  State<SwipeActionTile> createState() => _SwipeActionTileState();
+}
+
+class _SwipeActionTileState extends State<SwipeActionTile>
+    with SingleTickerProviderStateMixin {
+  late final SlidableController _controller = SlidableController(this);
+  bool _paneWasOpen = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   ActionPane? _buildPane(BuildContext context, SwipePane? pane) {
     if (pane == null || pane.actions.isEmpty) return null;
@@ -130,14 +145,23 @@ class SwipeActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SwipeRegionMarker(
-      child: Slidable(
-        // DismissiblePane requires the Slidable to carry a Key so list items are
-        // synced by identity, not index, when one is dismissed and removed.
-        key: key,
-        groupTag: groupTag,
-        startActionPane: _buildPane(context, startPane),
-        endActionPane: _buildPane(context, endPane),
-        child: child,
+      // Closed iOS tiles yield right drags to page back. An open pane keeps
+      // the drag so users can close it without accidentally leaving the page.
+      active: () => !App.isIOS || _paneWasOpen,
+      child: Listener(
+        // Slidable changes its ratio before the back recognizer sees a move.
+        // Decide from the pane state at touch down, not that transient ratio.
+        onPointerDown: (_) => _paneWasOpen = _controller.ratio != 0,
+        child: Slidable(
+          controller: _controller,
+          // DismissiblePane requires the Slidable to carry a Key so list items are
+          // synced by identity, not index, when one is dismissed and removed.
+          key: widget.key,
+          groupTag: widget.groupTag,
+          startActionPane: _buildPane(context, widget.startPane),
+          endActionPane: _buildPane(context, widget.endPane),
+          child: widget.child,
+        ),
       ),
     );
   }
