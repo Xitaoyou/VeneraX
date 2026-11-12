@@ -97,7 +97,11 @@ baselines conservatively build. Scheduled runs retry unpublished application
 changes after a failed build even if no new upstream commits arrive. Metadata-only
 changes after the last release still skip compilation. Manual dispatch always
 forces a build.
-The build pins the standard `macos-15-intel` runner (Flutter x64, Xcode 16.4).
+The build pins the standard `macos-15-intel` runner (Flutter 3.44.3 x64,
+Xcode 16.4). `flutter-version` is an explicit SDK version: never pass the
+`environment.flutter` compatibility range from pubspec to `flutter-version-file`.
+`flutter pub get` verifies the installed SDK against upstream constraints; a
+future incompatible SDK requirement requires a reviewed toolchain update.
 The generic `macos-15` ARM pool previously canceled a build after failing to
 allocate a hosted runner; using the Intel label avoids that specific pool.
 

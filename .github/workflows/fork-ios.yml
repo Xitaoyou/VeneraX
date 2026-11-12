@@ -87,7 +87,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version-file: pubspec.yaml
+          # pubspec's Flutter requirement is a range, not an installable SDK.
+          # Keep the tested toolchain explicit; pub get checks compatibility.
+          flutter-version: '3.44.3'
           architecture: x64
           cache: true
       - run: sudo xcode-select --switch /Applications/Xcode_16.4.app
