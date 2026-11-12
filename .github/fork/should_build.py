@@ -10,6 +10,7 @@ def is_metadata(path):
     if path in {
         'altstore-source.json', 'altstore-source-beta.json',
         '.github/fork/DESIGN.md', '.github/fork/release-notes.md',
+        '.github/fork/readme.zh.md', '.github/fork/readme.en.md',
     }:
         return True
     return '/' not in path and any(fnmatch.fnmatchcase(path, pattern) for pattern in (

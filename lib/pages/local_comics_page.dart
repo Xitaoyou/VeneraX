@@ -370,6 +370,7 @@ class _LocalComicsPageState extends State<LocalComicsPage>
             enableHero: false,
             hideBlocked: false,
             selections: selectedItems,
+            enableContextMenu: !multiSelectMode,
             onLongPressed: (c, heroID) {
               setState(() {
                 multiSelectMode = true;
@@ -400,6 +401,16 @@ class _LocalComicsPageState extends State<LocalComicsPage>
             menuBuilder: (c) {
               return [
                 MenuEntry(
+                  action: MenuAction.select,
+                  icon: Icons.checklist,
+                  text: 'Multi-Select'.tl,
+                  onClick: () => setState(() {
+                    multiSelectMode = true;
+                    selectedItems[c as LocalComic] = true;
+                  }),
+                ),
+                MenuEntry(
+                  group: MenuGroup.more,
                   icon: Icons.folder_open,
                   text: "Open Folder".tl,
                   onClick: () {
@@ -407,6 +418,8 @@ class _LocalComicsPageState extends State<LocalComicsPage>
                   },
                 ),
                 MenuEntry(
+                  action: MenuAction.remove,
+                  destructive: true,
                   icon: Icons.delete,
                   text: "Delete".tl,
                   onClick: () {
@@ -571,6 +584,7 @@ class _LocalComicsPageState extends State<LocalComicsPage>
       case ExportPhase.packaging:
         return "Packaging".tl;
       case ExportPhase.writing:
+        if (task.saveWithDialog) return "Save exported file".tl;
         var pct = task.writeProgress;
         if (pct != null) {
           return "Writing to folder @p%".tlParams({
@@ -635,13 +649,14 @@ class _LocalComicsPageState extends State<LocalComicsPage>
       context.showMessage(message: "An export task is already running".tl);
       return;
     }
-    var folder = await _pickExportFolder();
+    var folder = App.isOhos ? '' : await _pickExportFolder();
     if (folder == null || !mounted) return;
     var task = manager.startExport(
       folderPath: folder,
       format: format,
       comics: comics,
       merged: merged,
+      saveWithDialog: App.isOhos,
     );
     if (task == null) return;
     var controller = showLoadingDialog(
@@ -769,16 +784,19 @@ class _LocalComicsPageState extends State<LocalComicsPage>
   List<MenuEntry> exportActions(List<LocalComic> comics) {
     return [
       MenuEntry(
+        group: MenuGroup.export,
         icon: Icons.outbox_outlined,
         text: "Export as cbz".tl,
         onClick: () => _startExportTask(comics, ExportFormat.cbz),
       ),
       MenuEntry(
+        group: MenuGroup.export,
         icon: Icons.picture_as_pdf_outlined,
         text: "Export as pdf".tl,
         onClick: () => _startExportTask(comics, ExportFormat.pdf),
       ),
       MenuEntry(
+        group: MenuGroup.export,
         icon: Icons.import_contacts_outlined,
         text: "Export as epub".tl,
         onClick: () => _startExportTask(comics, ExportFormat.epub),
@@ -789,6 +807,12 @@ class _LocalComicsPageState extends State<LocalComicsPage>
 
 /// Opens the folder containing the comic in the system file explorer
 Future<void> openComicFolder(LocalComic comic) async {
+  if (App.isOhos) {
+    App.rootContext.showMessage(
+      message: "Opening folders in the system file manager is unavailable on this device".tl,
+    );
+    return;
+  }
   try {
     final folderPath = comic.baseDir;
 

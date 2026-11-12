@@ -3,6 +3,11 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      sync_upstream:
+        description: 'Sync upstream before building'
+        type: boolean
+        default: true
   schedule:
     - cron: '17 */6 * * *'
 
@@ -25,40 +30,36 @@ jobs:
           fetch-depth: 0
           ref: master
       - name: Verify IPA build filter
-        run: python3 .github/fork/test_should_build.py
+        run: |
+          python3 .github/fork/test_should_build.py
+          python3 .github/fork/test_sync_upstream.py
       - id: source
         shell: bash
         env:
-          SCHEDULED: ${{ github.event_name == 'schedule' }}
+          SYNC_UPSTREAM: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.sync_upstream) }}
+          GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           before=$(git rev-parse HEAD)
-          if [ "$SCHEDULED" = true ]; then
+          if [ "$SYNC_UPSTREAM" = true ]; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git fetch https://github.com/Kyosee/VeneraX.git master
-            upstream=$(git rev-parse FETCH_HEAD)
-            if ! git merge-base --is-ancestor "$upstream" HEAD; then
-              git merge --no-commit --no-ff "$upstream" || true
-              # Fork-owned CI must survive upstream CI changes. Application
-              # conflicts remain unresolved and fail the job for manual review.
-              git restore --source=HEAD --staged --worktree -- .github
-              if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
-                git diff --name-only --diff-filter=U
-                git merge --abort
-                exit 1
-              fi
-              test -f .git/MERGE_HEAD
-              git commit -m "Merge Kyosee/VeneraX master into personal iOS fork"
-              git push origin HEAD:master
-            fi
+            python3 .github/fork/sync_upstream.py FETCH_HEAD
+            git push origin HEAD:master
           fi
           after=$(git rev-parse HEAD)
           echo "sha=$after" >> "$GITHUB_OUTPUT"
           if [ "$EVENT_NAME" = push ]; then
             before=$PUSH_BEFORE
+          elif [ "$EVENT_NAME" = schedule ]; then
+            # Compare against the published app, not just this run's merge.
+            # Failed builds are retried even when upstream has not changed.
+            published_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name' 2>/dev/null || true)
+            before=$(git rev-parse --verify "${published_tag}^{commit}" 2>/dev/null || true)
+            before=${before:-0000000000000000000000000000000000000000}
           fi
           force=()
           if [ "$EVENT_NAME" = workflow_dispatch ]; then
@@ -96,6 +97,7 @@ jobs:
           flutter analyze --no-pub
           lib/foundation/image_surface_route.dart
           lib/components/pull_down_to_dismiss.dart
+          lib/components/swipe_action.dart
           lib/foundation/fork_release_version.dart
           lib/pages/reader/reader.dart
           lib/pages/comic_details_page/comic_page.dart
@@ -113,6 +115,7 @@ jobs:
           test/reader_pull_down_integration_test.dart
           test/fork_release_version_test.dart
           test/ios_back_swipe_zoomed_image_test.dart
+          test/fork_comic_tile_back_test.dart
       - name: Verify update feed metadata
         run: python3 .github/fork/test_feed.py
       - name: Build unsigned iOS app

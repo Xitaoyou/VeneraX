@@ -12,14 +12,21 @@ bool _isHandling = false;
 /// Only the most recent tap navigates; older ones still waiting give up.
 int _latestTap = 0;
 
-/// Waits until the main navigator exists and no lock screen is up.
+/// Waits until the app is foreground, the main navigator exists and is unlocked.
 ///
 /// A cold start delivers the tap before the main page is built (loading,
 /// disclaimer or lock screen still showing). Gives up after about a minute.
-Future<NavigatorState?> _waitForMainNavigator() async {
+Future<NavigatorState?> waitForUnlockedMainNavigator() async {
   for (var i = 0; i < 600; i++) {
     final navigator = App.mainNavigatorKey?.currentState;
-    if (navigator != null && navigator.mounted && !AuthPage.isActive) {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    // Native launch events can arrive before the rendering surface resumes.
+    final foreground =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    if (foreground &&
+        navigator != null &&
+        navigator.mounted &&
+        !AuthPage.isActive) {
       return navigator;
     }
     await Future.delayed(const Duration(milliseconds: 100));
@@ -29,7 +36,7 @@ Future<NavigatorState?> _waitForMainNavigator() async {
 
 /// Closes root routes (reader, dialogs) stacked over the main page, so a page
 /// pushed into the main navigator is not hidden beneath them.
-void _revealMainNavigator(NavigatorState navigator) {
+void revealMainNavigator(NavigatorState navigator) {
   final host = ModalRoute.of(navigator.context);
   if (host == null || host.isCurrent) return;
   host.navigator?.popUntil((route) => route == host || route.isFirst);
@@ -47,9 +54,9 @@ Future<void> openNotificationRoute(String event) async {
   final page = _pageFor(event);
   if (page == null) return;
   final tap = ++_latestTap;
-  final navigator = await _waitForMainNavigator();
+  final navigator = await waitForUnlockedMainNavigator();
   if (navigator == null || tap != _latestTap) return;
-  _revealMainNavigator(navigator);
+  revealMainNavigator(navigator);
   navigator.context.to(() => page);
 }
 

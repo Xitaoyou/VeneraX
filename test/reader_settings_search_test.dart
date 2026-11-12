@@ -26,6 +26,7 @@ void main() {
     appdata.settings['deviceSpecificSettings'] = <String, dynamic>{};
     appdata.settings['comicSpecificSettings'] = <String, dynamic>{};
     appdata.settings['readerMode'] = 'galleryLeftToRight';
+    appdata.settings['adaptiveReading'] = false;
     appdata.settings['readerNightMode'] = false;
     appdata.settings['readerNightModeFollowSystem'] = false;
     appdata.settings['showPageNumberInReader'] = true;
@@ -110,6 +111,13 @@ void main() {
       await search(tester, 'Split wide pages'.tl);
       await select(tester, 'Split wide pages');
       expect(find.text('Split wide pages'.tl).hitTestable(), findsOneWidget);
+      await search(tester, 'Paged comic reading mode'.tl);
+      await select(tester, 'Paged comic reading mode');
+      expect(
+        find.text('Adaptive reading mode'.tl).hitTestable(),
+        findsOneWidget,
+      );
+      expect(appdata.settings['adaptiveReading'], isFalse);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
@@ -217,5 +225,108 @@ void main() {
       expect(find.text('Open settings'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
+  );
+
+  testWidgets(
+    'a 400 pixel sidebar keeps child pages local on a 2560 pixel desktop',
+    (tester) async {
+      tester.view.physicalSize = const Size(2560, 1440);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Reader canvas'),
+                  Builder(
+                    builder: (context) => TextButton(
+                      onPressed: () => showSideBar(
+                        context,
+                        const ReaderSettingsPanel(
+                          child: ReaderSettings(
+                            showSearch: true,
+                            comicId: 'comic',
+                            comicSource: 'source',
+                          ),
+                        ),
+                        width: 400,
+                      ),
+                      child: const Text('Open settings'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open settings'));
+      await tester.pumpAndSettle();
+
+      void expectLocalPage() {
+        final bounds = tester.getRect(find.byType(ReaderSettings).last);
+        expect(bounds.left, closeTo(2160, 0.01));
+        expect(bounds.width, closeTo(400, 0.01));
+        expect(find.text('Reader canvas'), findsOneWidget);
+        expect(
+          tester.getRect(find.text('Reader canvas')).right,
+          lessThan(2160),
+        );
+        expect(tester.takeException(), isNull);
+      }
+
+      Future<void> openPage(String title) async {
+        final link = find.text(title);
+        await tester.ensureVisible(link);
+        await tester.pumpAndSettle();
+        await tester.tap(link);
+        await tester.pumpAndSettle();
+        expectLocalPage();
+      }
+
+      expectLocalPage();
+      await search(tester, 'Proxy');
+      expect(find.text('No matching settings'), findsOneWidget);
+      await tester.tap(find.byTooltip('Clear'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enable comic specific settings'), findsOneWidget);
+      expect(find.text('Enable device specific settings'), findsNothing);
+
+      await openPage('Page layout');
+      expect(
+        tester.widget<ReaderSettings>(find.byType(ReaderSettings).last).section,
+        'Page layout',
+      );
+      await tester.tap(find.byTooltip('Back').last);
+      await tester.pumpAndSettle();
+      expectLocalPage();
+      expect(find.byType(TextField), findsOneWidget);
+
+      await openPage('AI Translation');
+      final translation = tester.widget<ReaderSettings>(
+        find.byType(ReaderSettings).last,
+      );
+      expect(translation.translationOnly, isTrue);
+      expect(translation.comicId, 'comic');
+      expect(translation.comicSource, 'source');
+      expect(find.text('LLM providers'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back').last);
+      await tester.pumpAndSettle();
+      expectLocalPage();
+      expect(find.byType(TextField), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back').last);
+      await tester.pumpAndSettle();
+      expect(find.byType(ReaderSettingsPanel), findsNothing);
+      expect(find.byType(ReaderSettings), findsNothing);
+      expect(find.text('Reader canvas').hitTestable(), findsOneWidget);
+      expect(find.text('Open settings').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );
 }

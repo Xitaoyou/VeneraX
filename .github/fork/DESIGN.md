@@ -71,8 +71,14 @@ The fork keeps the upstream marketing version, builds with a monotonic fork
 build number, tags `vVERSION+BUILD`, and compares both in update checks.
 
 `fork-ios.yml` runs on master pushes, manual dispatch, and every six hours.
-Scheduled runs merge upstream application code normally and preserve the
-fork-owned `.github` directory. Other merge conflicts stop the job. Upstream
+Scheduled and manual runs (unless sync is unchecked) merge upstream application
+code and preserve the fork-owned `.github` directory. `sync_upstream.py`
+reconstructs both READMEs using the upstream body and separate fork fragments
+in `.github/fork/readme.{zh,en}.md`. Translation JSON is merged by key only when
+one side is unchanged or both sides agree; competing edits to the same value
+stop for review. All other code conflicts abort the merge and list the paths
+in the Actions summary. Never resolve application conflicts by choosing a whole
+side automatically. Upstream
 workflow changes must be reviewed manually. The normal GitHub token can push
 application merges without modifying workflow files; the same run builds the
 merged SHA, so it does not depend on a token push triggering another workflow.
@@ -82,12 +88,15 @@ keeps an existing branch reference even when master advances during a build,
 so release creation does not require an extra workflow-scoped secret under
 [GitHub's release permission rule](https://github.blog/changelog/2023-11-02-github-actions-enforcing-workflow-scope-when-creating-a-release/).
 Every push runs the lightweight source job. `should_build.py` compares the
-push's previous SHA, or a scheduled merge's before/after SHAs. Changes confined
+push's previous SHA, or the latest published release tag for scheduled runs. Changes confined
 to root README/CHANGELOG and project policy/license documents, root AltStore
 manifests, or fork design/release notes skip the expensive IPA build. They still
 merge normally. Bundled `doc/*.md`, assets, application code, dependencies,
 workflow and publishing scripts all trigger builds; unknown paths or missing
-baselines conservatively build. Manual dispatch always forces a build.
+baselines conservatively build. Scheduled runs retry unpublished application
+changes after a failed build even if no new upstream commits arrive. Metadata-only
+changes after the last release still skip compilation. Manual dispatch always
+forces a build.
 The build pins the standard `macos-15-intel` runner (Flutter x64, Xcode 16.4).
 The generic `macos-15` ARM pool previously canceled a build after failing to
 allocate a hosted runner; using the Intel label avoids that specific pool.
@@ -109,8 +118,8 @@ It verifies all six reading directions and live collection-policy changes.
 `pull_down_to_dismiss_test.dart` uses real PhotoView and PhotoViewGallery widgets
 to cover horizontal paging followed by dismissal, zoom/pan, pinch, cancel,
 short/upward drags, disabled policy and policy changes during a drag.
-`ios_back_swipe_zoomed_image_test.dart` retains upstream edge-back regression
-coverage; `fork_release_version_test.dart` covers same-version fork rebuilds.
+`ios_back_swipe_zoomed_image_test.dart` is retained unchanged from upstream.
+Fork card tests live separately in `fork_comic_tile_back_test.dart`; `fork_release_version_test.dart` covers same-version fork rebuilds.
 
 `image_surface_route_test.dart` uses real AppPageRoute/ImageSurfaceRoute pairs
 to check stationary backgrounds, whole-page chrome, visible/nested Hero targets,
@@ -120,3 +129,8 @@ Before using a new IPA as the main installation, validate on an iPhone: LTR/RTL
 page turns then down-drag; vertical reading; swipe collection and its warning;
 pinch zoom, double-tap and long-press zoom then pan; cover and favorites previews;
 comments; dialogs; existing edge-back; switching reading mode during the session.
+
+`test_sync_upstream.py` exercises real Git merges: README and independent JSON
+conflicts resolve while fork CI is retained, repeated sync is a no-op, and code
+conflicts abort without overwriting the original branch. `test_should_build.py`
+covers metadata skipping, application resources, invalid baselines and force builds.

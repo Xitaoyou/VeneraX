@@ -1,8 +1,22 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:venera/components/components.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera/foundation/app_page_route.dart';
+
+// Route navigation is exercised by reader_back_swipe_test.dart.
+class _TestBackGestureController implements IOSBackGestureController {
+  @override
+  AnimationController get controller => throw UnimplementedError();
+
+  @override
+  NavigatorState get navigator => throw UnimplementedError();
+
+  @override
+  void dragUpdate(double delta) {}
+
+  @override
+  void dragEnd(double velocity) {}
+}
 
 /// Regression test for #310.
 ///
@@ -13,24 +27,22 @@ import 'package:venera/foundation/app_page_route.dart';
 void main() {
   var starts = 0;
   var zoomed = false;
+  var enabled = true;
 
-  Widget buildDetector({bool Function()? active}) {
+  Widget buildDetector({bool Function()? active, Widget? child}) {
     return MaterialApp(
       home: IOSBackGestureDetector(
         gestureWidth: 20,
-        // Only called once the recognizer has claimed the drag; returning false
-        // leaves the route alone.
-        enabledCallback: () {
+        enabledCallback: () => enabled,
+        onStartPopGesture: () {
           starts++;
-          return false;
+          return _TestBackGestureController();
         },
-        onStartPopGesture: () => throw StateError('unreachable'),
         child: SwipeRegionMarker(
           active: active,
-          child: const ColoredBox(
-            color: Colors.white,
-            child: SizedBox.expand(),
-          ),
+          child:
+              child ??
+              const ColoredBox(color: Colors.white, child: SizedBox.expand()),
         ),
       ),
     );
@@ -39,6 +51,7 @@ void main() {
   setUp(() {
     starts = 0;
     zoomed = false;
+    enabled = true;
   });
 
   testWidgets('mid-page right swipe starts the back gesture when not zoomed', (
@@ -68,7 +81,9 @@ void main() {
     expect(starts, 1);
   });
 
-  testWidgets('zoom that starts after pointer down is honored', (tester) async {
+  testWidgets('zoom that starts after pointer down is honored', (
+    tester,
+  ) async {
     await tester.pumpWidget(buildDetector(active: () => zoomed));
     final gesture = await tester.startGesture(const Offset(300, 300));
     // Long-press zoom kicks in while the finger is still resting.
@@ -89,101 +104,106 @@ void main() {
     expect(starts, 0);
   });
 
-  Widget buildTileDetector({bool startPane = false, VoidCallback? onTap}) {
-    final pane = SwipePane(
-      actions: [
-        SwipeAction(icon: Icons.favorite, label: 'Favorite', onPressed: () {}),
-      ],
-    );
-    return MaterialApp(
-      home: Material(
-        child: IOSBackGestureDetector(
-          gestureWidth: 20,
-          enabledCallback: () {
-            starts++;
-            return false;
-          },
-          onStartPopGesture: () => throw StateError('unreachable'),
-          child: ListView(
-            children: [
-              SwipeActionTile(
-                startPane: startPane ? pane : null,
-                endPane: pane,
-                child: InkWell(
-                  onTap: onTap,
-                  child: const SizedBox(
-                    height: 220,
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 150,
-                          height: 200,
-                          child: ColoredBox(color: Colors.blue),
-                        ),
-                        Expanded(child: Text('Comic title')),
-                      ],
-                    ),
-                  ),
+  testWidgets('a diagonal back fling reports a horizontal end velocity', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildDetector(active: () => false));
+    await tester.flingFrom(const Offset(300, 300), const Offset(180, 30), 2500);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(starts, 1);
+  });
+
+  testWidgets('a pointer already claimed by a child cannot start going back', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildDetector(
+        active: () => false,
+        child: RawGestureDetector(
+          behavior: HitTestBehavior.opaque,
+          gestures: {
+            EagerGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+                  EagerGestureRecognizer.new,
+                  (_) {},
                 ),
-              ),
-              const SizedBox(height: 1800),
-            ],
-          ),
+          },
+          child: const SizedBox.expand(),
         ),
       ),
     );
+    final gesture = await tester.startGesture(const Offset(300, 300));
+    await gesture.moveBy(const Offset(40, 0));
+    await gesture.moveBy(const Offset(40, 0));
+    await gesture.up();
+    await tester.pump();
+    expect(starts, 0);
+  });
+
+  testWidgets('another finger does not replace an active back swipe', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildDetector(active: () => false));
+    final first = await tester.startGesture(const Offset(300, 300));
+    await first.moveBy(const Offset(40, 0));
+    expect(starts, 1);
+
+    final second = await tester.startGesture(const Offset(250, 300));
+    await second.moveBy(const Offset(40, 0));
+    await second.up();
+    await first.moveBy(const Offset(40, 0));
+    await first.up();
+    await tester.pump();
+    expect(starts, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final canGoBack in [true, false]) {
+    testWidgets('fast edge swipes honor back availability: $canGoBack', (
+      tester,
+    ) async {
+      enabled = canGoBack;
+      var childUpdates = 0;
+      await tester.pumpWidget(
+        buildDetector(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragUpdate: (_) => childUpdates++,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+      final gesture = await tester.startGesture(const Offset(5, 300));
+      await gesture.moveBy(const Offset(40, 0));
+      await gesture.moveBy(const Offset(40, 0));
+      await gesture.up();
+      await tester.pump();
+      expect(starts, canGoBack ? 1 : 0);
+      expect(childUpdates, canGoBack ? 0 : greaterThan(0));
+    });
   }
 
-  for (final startPane in [false, true]) {
-    for (final x in [80.0, 300.0]) {
-      testWidgets(
-        'closed comic tile yields right swipe at $x, start pane $startPane',
-        (tester) async {
-          await tester.pumpWidget(buildTileDetector(startPane: startPane));
-          await tester.dragFrom(Offset(x, 100), const Offset(220, 0));
-          await tester.pumpAndSettle();
-          expect(starts, 1);
-        },
-        variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-      );
-    }
-  }
-
-  testWidgets(
-    'left swipe opens actions, right swipe closes without back',
-    (tester) async {
-      await tester.pumpWidget(buildTileDetector());
-      final controller = Slidable.of(
-        tester.element(find.byType(InkWell).first),
-      )!;
-      await tester.dragFrom(const Offset(300, 100), const Offset(-200, 0));
-      await tester.pumpAndSettle();
-      expect(controller.ratio, lessThan(0));
-      expect(starts, 0);
-      await tester.dragFrom(const Offset(100, 100), const Offset(220, 0));
-      await tester.pumpAndSettle();
-      expect(controller.ratio, 0);
-      expect(starts, 0);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-  );
-
-  testWidgets(
-    'comic tile retains taps and vertical scrolling',
-    (tester) async {
-      var taps = 0;
-      await tester.pumpWidget(buildTileDetector(onTap: () => taps++));
-      await tester.tapAt(const Offset(80, 100));
-      await tester.pumpAndSettle();
-      expect(taps, 1);
-      await tester.dragFrom(const Offset(80, 160), const Offset(0, -130));
-      await tester.pumpAndSettle();
-      expect(
-        tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels,
-        greaterThan(0),
-      );
-      expect(starts, 0);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-  );
+  testWidgets('edge taps and vertical drags still reach the child', (
+    tester,
+  ) async {
+    var taps = 0;
+    var verticalUpdates = 0;
+    await tester.pumpWidget(
+      buildDetector(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => taps++,
+          onVerticalDragUpdate: (_) => verticalUpdates++,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.tapAt(const Offset(5, 300));
+    await tester.dragFrom(const Offset(5, 300), const Offset(0, 100));
+    await tester.pump();
+    expect(taps, 1);
+    expect(verticalUpdates, greaterThan(0));
+    expect(starts, 0);
+  });
 }

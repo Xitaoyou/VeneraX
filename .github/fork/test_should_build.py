@@ -9,7 +9,8 @@ from should_build import is_metadata, should_build
 class BuildFilterTest(unittest.TestCase):
     def test_path_policy(self):
         for path in ['README_EN.md', 'CHANGELOG.md', 'altstore-source.json',
-                     '.github/fork/DESIGN.md', '.github/fork/release-notes.md']:
+                     '.github/fork/DESIGN.md', '.github/fork/release-notes.md',
+                     '.github/fork/readme.zh.md', '.github/fork/readme.en.md']:
             with self.subTest(path=path):
                 self.assertTrue(is_metadata(path))
         for path in ['lib/main.dart', 'assets/help.md', 'doc/guide.zh.md',
