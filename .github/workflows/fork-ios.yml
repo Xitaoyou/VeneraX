@@ -33,6 +33,7 @@ jobs:
         run: |
           python3 .github/fork/test_should_build.py
           python3 .github/fork/test_sync_upstream.py
+          python3 .github/fork/test_release_notes.py
       - id: source
         shell: bash
         env:
@@ -118,6 +119,9 @@ jobs:
           test/fork_release_version_test.dart
           test/ios_back_swipe_zoomed_image_test.dart
           test/fork_comic_tile_back_test.dart
+          test/fork_release_notes_test.dart
+          test/app_update_changelog_test.dart
+          test/app_update_dialog_test.dart
       - name: Verify update feed metadata
         run: python3 .github/fork/test_feed.py
       - name: Build unsigned iOS app
@@ -149,8 +153,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          export PREVIOUS_TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name' 2>/dev/null || true)
+          python3 .github/fork/make_release_notes.py
           python3 .github/fork/make_feed.py
-          gh release create "$TAG" result/*.ipa result/SHA256SUMS result/altstore-source.json \
+          gh release create "$TAG" result/*.ipa result/SHA256SUMS result/altstore-source.json result/release-notes.md \
             --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --latest \
             --title "VeneraX $VERSION · personal iOS build $BUILD" \
-            --notes-file .github/fork/release-notes.md
+            --notes-file result/release-notes.md

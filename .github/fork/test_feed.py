@@ -17,6 +17,8 @@ class FeedTest(unittest.TestCase):
             try:
                 os.chdir(temp)
                 Path('result').mkdir()
+                notes = '## 上游更新（中文）\n上游说明\n## 个人修改（本 Fork）\n个人功能'
+                Path('result/release-notes.md').write_text(notes, encoding='utf-8')
                 ipa = Path('result/VeneraX-ios-2.3.10+10002.ipa')
                 info = {
                     'CFBundleIdentifier': 'io.github.kyosee.venera',
@@ -40,6 +42,7 @@ class FeedTest(unittest.TestCase):
                     encoding='utf-8'))
                 app = feed['apps'][0]
                 entry = app['versions'][0]
+                self.assertEqual(entry['localizedDescription'], notes)
                 self.assertEqual(app['bundleIdentifier'], info['CFBundleIdentifier'])
                 self.assertEqual(app['appPermissions']['privacy'], {
                     k: v for k, v in info.items() if k.startswith('NS')

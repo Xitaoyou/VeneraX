@@ -16,6 +16,8 @@ assert str(info['CFBundleVersion']) == build
 privacy = {k: v for k, v in info.items()
            if k.startswith('NS') and k.endswith('UsageDescription')}
 icon = f'https://raw.githubusercontent.com/{repo}/master/assets/app_icon.png'
+notes = Path('result/release-notes.md')
+release_description = notes.read_text(encoding='utf-8') if notes.exists() else '个人 iOS Fork：支持下滑返回。'
 entry = {
     'version': version,
     'buildVersion': build,
@@ -23,7 +25,7 @@ entry = {
     'downloadURL': f'https://github.com/{repo}/releases/download/{quote(tag)}/{quote(ipa.name)}',
     'size': ipa.stat().st_size,
     'minOSVersion': info.get('MinimumOSVersion', '15.1'),
-    'localizedDescription': '个人 fork：漫画阅读器、封面和图片预览下滑返回。',
+    'localizedDescription': release_description,
 }
 feed = {
     'name': 'VeneraX · Xitaoyou',
@@ -33,7 +35,7 @@ feed = {
         'name': 'VeneraX',
         'bundleIdentifier': info['CFBundleIdentifier'],
         'developerName': 'Xitaoyou / VeneraX contributors',
-        'localizedDescription': entry['localizedDescription'],
+        'localizedDescription': '个人 iOS Fork：漫画阅读器、封面与图片预览下滑返回。',
         'iconURL': icon,
         'versions': [entry],
         'appPermissions': {'entitlements': [], 'privacy': privacy},

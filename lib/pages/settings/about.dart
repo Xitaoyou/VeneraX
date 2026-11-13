@@ -183,11 +183,13 @@ class _GitHubRelease {
   final String version;
   final String tag;
   final String htmlUrl;
+  final String body;
   final List<_GitHubAsset> assets;
   const _GitHubRelease({
     required this.version,
     required this.tag,
     required this.htmlUrl,
+    this.body = '',
     required this.assets,
   });
 }
@@ -266,6 +268,7 @@ Future<_GitHubRelease> _fetchLatestRelease(_GithubUpdateConfig config) async {
     version: version,
     tag: tag,
     htmlUrl: htmlUrl,
+    body: map['body']?.toString() ?? '',
     assets: assets,
   );
 }
@@ -294,6 +297,10 @@ Future<List<GuideBlock>> _fetchChangelog(
   _GithubUpdateConfig config,
   _GitHubRelease release,
 ) async {
+  // Fork tags include a build number and have no upstream-style notes file.
+  // Share the published body with GitHub and the update feed.
+  if (release.body.trim().isNotEmpty) return parseAppChangelog(release.body);
+
   String rawUrl(String lang) =>
       "https://raw.githubusercontent.com/${config.owner}/${config.repo}"
       "/${release.tag}/release-notes/${release.tag}.$lang.md";

@@ -141,3 +141,13 @@ comments; dialogs; existing edge-back; switching reading mode during the session
 conflicts resolve while fork CI is retained, repeated sync is a no-op, and code
 conflicts abort without overwriting the original branch. `test_should_build.py`
 covers metadata skipping, application resources, invalid baselines and force builds.
+
+## Release descriptions
+
+`make_release_notes.py` generates Chinese notes in two sections: upstream and
+personal fork changes. It reads the exact version's `release-notes/vVERSION.zh-CN.md`,
+then the matching CHANGELOG section. Missing Chinese notes are explicitly marked;
+it never substitutes another version. Same-version rebuilds are labeled as such.
+Fork features in `release-notes.md` are cumulative, explicitly not all newly added.
+The generated body is published on GitHub, attached as `release-notes.md`, included
+in each SideStore version description, and displayed by the in-app update dialog.
