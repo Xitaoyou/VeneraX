@@ -37,7 +37,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-          flutter-version-file: pubspec.yaml
+          flutter-version: '3.44.3'
           architecture: x64
       - run: sudo xcode-select --switch /Applications/Xcode_16.4.app
       - run: flutter pub get
@@ -95,7 +95,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-          flutter-version-file: pubspec.yaml
+          flutter-version: '3.44.3'
           architecture: x64
       - run: sudo xcode-select --switch /Applications/Xcode_16.4.app
       - run: flutter pub get
@@ -123,7 +123,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-          flutter-version-file: pubspec.yaml
+          flutter-version: '3.44.3'
           architecture: x64
       - name: Verify Android signing secrets
         env:
@@ -244,7 +244,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-          flutter-version-file: pubspec.yaml
+          flutter-version: '3.44.3'
           architecture: x64
       - name: build
         run: |
@@ -262,7 +262,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version-file: pubspec.yaml
+          flutter-version: '3.44.3'
           architecture: x64
       - run: |
           sudo apt-get update -y
@@ -308,7 +308,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'master'
-          flutter-version-file: pubspec.yaml
+          flutter-version: '3.44.3'
       - run: |
           flutter pub get
           sudo apt-get update -y
