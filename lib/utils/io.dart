@@ -670,6 +670,14 @@ class Share {
   static void shareText(String text) {
     s.SharePlus.instance.share(s.ShareParams(text: text));
   }
+
+  /// Shares existing files by path (the multi-file export path: the files must
+  /// stay on disk until the share completes, so bytes are never held).
+  static void shareFiles(List<String> paths) {
+    s.SharePlus.instance.share(
+      s.ShareParams(files: [for (var p in paths) s.XFile(p)]),
+    );
+  }
 }
 
 String bytesToReadableString(int bytes) {

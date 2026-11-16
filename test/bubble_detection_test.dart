@@ -152,6 +152,23 @@ void main() {
       expect(compareMangaBlocks(rightCaption, leftCaption), lessThan(0));
     });
 
+    test('left-to-right pages invert the reading direction', () {
+      // Same row band: the leftmost caption comes first.
+      var rightCaption = IntRect(200, 10, 300, 30);
+      var leftCaption = IntRect(10, 10, 90, 30);
+      expect(
+        compareMangaBlocks(leftCaption, rightCaption, rightToLeft: false),
+        lessThan(0),
+      );
+      // Columns walk left to right.
+      var left = IntRect(10, 100, 40, 300);
+      var right = IntRect(200, 100, 230, 300);
+      expect(
+        compareMangaBlocks(left, right, rightToLeft: false),
+        lessThan(0),
+      );
+    });
+
     test('vertical text sorts before horizontal captions', () {
       var column = IntRect(10, 10, 40, 200);
       var caption = IntRect(100, 10, 300, 30);

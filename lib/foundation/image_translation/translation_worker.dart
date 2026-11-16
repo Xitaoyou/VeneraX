@@ -658,7 +658,7 @@ class _WorkerState {
     var det = _detect(image, req.paths);
     if (det.textBoxes.isEmpty) return const [];
     var clusters = _groupTextRegions(det, image.width, image.height);
-    _sortClusters(clusters, det.panels);
+    _sortClusters(clusters, det.panels, rightToLeft: _isRightToLeft(req));
     const maxBlocks = 32;
     if (clusters.length > maxBlocks) {
       clusters = clusters.sublist(0, maxBlocks);
@@ -921,14 +921,30 @@ class _WorkerState {
     return clusters;
   }
 
-  /// Reading order: panels in manga order when present, clusters inside them
-  /// in manga order, then everything outside.
-  void _sortClusters(List<List<IntRect>> clusters, List<IntRect> panels) {
+  /// Manga languages read right-to-left; western comics left-to-right.
+  /// 'auto' keeps the manga default: the object-detection backends are
+  /// manga-first, and the row tie-break is the only place the choice shows.
+  bool _isRightToLeft(_OcrPageRequest req) {
+    var lang = req.sourceLang;
+    return lang == 'auto' || lang == 'ja' || lang.startsWith('zh');
+  }
+
+  /// Reading order: panels in page direction when present, clusters inside
+  /// them in page direction, then everything outside.
+  void _sortClusters(
+    List<List<IntRect>> clusters,
+    List<IntRect> panels, {
+    required bool rightToLeft,
+  }) {
     if (panels.isEmpty) {
-      clusters.sort((a, b) => compareMangaBlocks(_boundsOf(a), _boundsOf(b)));
+      clusters.sort(
+        (a, b) =>
+            compareMangaBlocks(_boundsOf(a), _boundsOf(b), rightToLeft: rightToLeft),
+      );
       return;
     }
-    var ordered = [...panels]..sort(compareMangaBlocks);
+    var ordered = [...panels]
+      ..sort((a, b) => compareMangaBlocks(a, b, rightToLeft: rightToLeft));
     int panelIndex(IntRect b) {
       var cx = (b.left + b.right) / 2;
       var cy = (b.top + b.bottom) / 2;
@@ -945,7 +961,11 @@ class _WorkerState {
       var pa = panelIndex(_boundsOf(a));
       var pb = panelIndex(_boundsOf(b));
       if (pa != pb) return pa.compareTo(pb);
-      return compareMangaBlocks(_boundsOf(a), _boundsOf(b));
+      return compareMangaBlocks(
+        _boundsOf(a),
+        _boundsOf(b),
+        rightToLeft: rightToLeft,
+      );
     });
   }
 

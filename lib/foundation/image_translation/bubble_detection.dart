@@ -63,15 +63,34 @@ List<PanelDetection> runMangaPanelDetector(
   var sy = image.height / input;
   var pixels = image.pixels;
   // Plain resize (no letterbox), RGB, /255 — the model's exported contract.
+  // Bilinear sampling: the detector was verified against smooth resampling;
+  // nearest-neighbour aliasing drops small or thin lettering.
+  int clampX(int x) => x < 0 ? 0 : (x > image.width - 1 ? image.width - 1 : x);
+  int clampY(int y) => y < 0 ? 0 : (y > image.height - 1 ? image.height - 1 : y);
+  double sample(int c, double fy, double fx) {
+    var y0 = clampY(fy.floor());
+    var y1 = clampY(y0 + 1);
+    var x0 = clampX(fx.floor());
+    var x1 = clampX(x0 + 1);
+    var wy = fy - fy.floor();
+    var wx = fx - fx.floor();
+    var p00 = pixels[(y0 * image.width + x0) * 4 + c].toDouble();
+    var p01 = pixels[(y0 * image.width + x1) * 4 + c].toDouble();
+    var p10 = pixels[(y1 * image.width + x0) * 4 + c].toDouble();
+    var p11 = pixels[(y1 * image.width + x1) * 4 + c].toDouble();
+    var top = p00 + (p01 - p00) * wx;
+    var bottom = p10 + (p11 - p10) * wx;
+    return (top + (bottom - top) * wy) / 255.0;
+  }
+
   for (var y = 0; y < input; y++) {
-    var fy = ((y + 0.5) * sy - 0.5).floor().clamp(0, image.height - 1);
+    var fy = (y + 0.5) * sy - 0.5;
     for (var x = 0; x < input; x++) {
-      var fx = ((x + 0.5) * sx - 0.5).floor().clamp(0, image.width - 1);
-      var si = (fy * image.width + fx) * 4;
+      var fx = (x + 0.5) * sx - 0.5;
       var di = y * input + x;
-      tensor[di] = pixels[si] / 255.0; // R
-      tensor[plane + di] = pixels[si + 1] / 255.0; // G
-      tensor[2 * plane + di] = pixels[si + 2] / 255.0; // B
+      tensor[di] = sample(0, fy, fx); // R
+      tensor[plane + di] = sample(1, fy, fx); // G
+      tensor[2 * plane + di] = sample(2, fy, fx); // B
     }
   }
   var output = session
@@ -245,15 +264,20 @@ List<IntRect> maskBoxes(
   return boxes;
 }
 
-/// Sorts block bounds in manga reading order: vertical columns read
-/// right-to-left then top-to-bottom; horizontal rows read top-to-bottom.
-/// Used when the panel model gives no panels to lean on.
-int compareMangaBlocks(IntRect a, IntRect b) {
+/// Sorts block bounds in comic reading order. [rightToLeft] selects the
+/// page direction: manga (Japanese/Chinese) reads panels and vertical
+/// columns right-to-left, western comics read left-to-right. Vertical
+/// columns always read top-to-bottom within their band; horizontal rows
+/// top-to-bottom, then along the page direction.
+int compareMangaBlocks(IntRect a, IntRect b, {bool rightToLeft = true}) {
   var aVertical = a.height > a.width * 1.3;
   var bVertical = b.height > b.width * 1.3;
   if (aVertical && bVertical) {
-    var byRight = b.right.compareTo(a.right);
-    if (byRight != 0) return byRight;
+    // Columns: along the page direction, then top to bottom.
+    var along = rightToLeft
+        ? b.right.compareTo(a.right)
+        : a.left.compareTo(b.left);
+    if (along != 0) return along;
     return a.top.compareTo(b.top);
   }
   if (aVertical != bVertical) {
@@ -262,5 +286,7 @@ int compareMangaBlocks(IntRect a, IntRect b) {
   }
   var byTop = a.top.compareTo(b.top);
   if (byTop != 0) return byTop;
-  return b.right.compareTo(a.right);
+  return rightToLeft
+      ? b.right.compareTo(a.right)
+      : a.left.compareTo(b.left);
 }

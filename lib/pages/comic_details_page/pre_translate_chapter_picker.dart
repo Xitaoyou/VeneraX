@@ -780,8 +780,21 @@ class _SelectPreTranslateChapterState extends State<_SelectPreTranslateChapter>
       context.showMessage(message: "No stored pages".tl);
       return;
     }
-    var directory = await selectDirectory();
-    if (directory == null) return;
+    // Mobile has no writable user-picked directory (iOS folder access is
+    // security-scoped), so the pages render into the cache and go out through
+    // the share sheet; desktop keeps the directory picker.
+    String directory;
+    if (App.isMobile) {
+      directory = FilePath.join(
+        App.cachePath,
+        'translated_export_${chapter.identity.chapterId}',
+      );
+      Directory(directory).createSync(recursive: true);
+    } else {
+      var picked = await selectDirectory();
+      if (picked == null) return;
+      directory = picked;
+    }
     var controller = showLoadingDialog(
       context,
       allowCancel: false,
@@ -799,6 +812,15 @@ class _SelectPreTranslateChapterState extends State<_SelectPreTranslateChapter>
           );
         },
       );
+      if (App.isMobile && written > 0) {
+        var files = Directory(directory)
+            .listSync()
+            .whereType<File>()
+            .map((f) => f.path)
+            .toList()
+          ..sort();
+        Share.shareFiles(files);
+      }
       App.rootContext.showMessage(
         message: '@written pages exported, @skipped skipped'.tlParams({
           'written': written,
