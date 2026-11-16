@@ -85,7 +85,8 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
               _buildComponent(context, component, requiredIds).toSliver(),
           _buildSectionHeader(context, "Text recognition".tl).toSliver(),
           for (var component in TranslationModels.all)
-            if (component.id != 'text_detector')
+            if (component.id != 'text_detector' &&
+                !component.id.startsWith('detector_'))
               _buildComponent(context, component, requiredIds).toSliver(),
           _buildJaOcrImport(context).toSliver(),
           const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
@@ -148,6 +149,8 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
     }
     var subtitle = active
         ? "Using the imported model".tl
+        : TranslationModels.ocrJa.isInstalled
+        ? "Using the bundled model".tl
         : "Import a manga-ocr encoder/decoder/vocab triple from local files, e.g. ImageTrans's fp16 weights (smaller and faster than the download)."
               .tl;
     if (state.error != null) {
@@ -189,13 +192,14 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
   }
 
   /// The detector actually in use — the built-in DBNet or one of the
-  /// ImageTrans object-detection/segmentation backends — with the editor one
-  /// tap away. Lives here because this page is where users look for model
-  /// choices.
+  /// bundled ImageTrans object-detection/segmentation backends — with the
+  /// selector one tap away. The bundled default is the legacy balloon
+  /// segmentation, so AI translation works out of the box.
   Widget _buildActiveDetectorRow(BuildContext context) {
     var custom = TranslationSources.detector;
-    var active = custom != null && custom.component.isInstalled;
-    var (kindLabel, hint) = switch (TranslationModels.activeDetectorKind) {
+    var customActive = custom != null && custom.component.isInstalled;
+    var kind = TranslationModels.activeDetectorKind;
+    var (kindLabel, hint) = switch (kind) {
       'manga-panel' => ("manga-panel (RT-DETR)".tl, "Text blocks + panels".tl),
       'balloon-seg' => ("Balloon segmentation (legacy)".tl, "Bubble masks".tl),
       'manga-panel-balloon' => (
@@ -204,23 +208,74 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
       ),
       _ => ("Built-in (PP-OCRv4 mobile)".tl, "Text line boxes".tl),
     };
+    if (customActive) {
+      hint = "Custom imported model".tl;
+    }
     return ListTile(
       title: Text("Detection model".tl),
-      subtitle: Text(
-        active
-            ? "$kindLabel\n$hint"
-            : "$kindLabel\n${"Tap to switch to manga-panel or balloon detection".tl}",
-      ),
+      subtitle: Text("$kindLabel\n$hint"),
       isThreeLine: true,
       trailing: const Icon(Icons.chevron_right),
-      onTap: () async {
-        var saved = await showDialog<CustomDetectorModel>(
-          context: App.rootContext,
-          builder: (context) =>
-              _DetectorEditor(existing: TranslationSources.detector),
-        );
-        if (saved != null && mounted) setState(() {});
-      },
+      onTap: () => _pickDetectorKind(context),
+    );
+  }
+
+  Future<void> _pickDetectorKind(BuildContext context) async {
+    const options = <(String, String)>[
+      ('balloon-seg', 'Balloon segmentation (legacy)'),
+      ('manga-panel', 'manga-panel (RT-DETR)'),
+      ('manga-panel-balloon', 'manga-panel + balloon'),
+      ('dbnet', 'PP-OCR (DBNet)'),
+    ];
+    var current = TranslationModels.activeDetectorKind;
+    var custom = TranslationSources.detector;
+    var customActive = custom != null && custom.component.isInstalled;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => ContentDialog(
+        title: "Detection model".tl,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (customActive)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    "A custom imported model is active and overrides this selection."
+                        .tl,
+                    style: ts.s12.copyWith(color: context.colorScheme.outline),
+                  ),
+                ),
+              for (var (value, label) in options)
+                ListTile(
+                  title: Text(label.tl),
+                  leading: Icon(
+                    value == current && !customActive
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: value == current && !customActive
+                        ? context.colorScheme.primary
+                        : null,
+                  ),
+                  dense: true,
+                  onTap: () {
+                    TranslationModels.setDetectorKind(value);
+                    dialogContext.pop();
+                    if (mounted) setState(() {});
+                  },
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => dialogContext.pop(),
+            child: Text("Cancel".tl),
+          ),
+        ],
+      ),
     );
   }
 

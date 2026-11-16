@@ -1972,7 +1972,11 @@
     "Bubble masks": "气泡轮廓",
     "Text blocks + panels + bubble grouping": "文字块 + 分镜 + 气泡分组",
     "Text line boxes": "文字行框",
-    "Tap to switch to manga-panel or balloon detection": "点按切换到 manga-panel 或气泡检测"
+    "Tap to switch to manga-panel or balloon detection": "点按切换到 manga-panel 或气泡检测",
+    "pages": "页",
+    "Custom imported model": "自定义导入模型",
+    "A custom imported model is active and overrides this selection.": "自定义导入模型已启用，会覆盖此选择。",
+    "Using the bundled model": "正在使用内置模型"
   },
   "zh_TW": {
     "Adaptive reading mode": "自適應閱讀模式",
@@ -3947,6 +3951,10 @@
     "Bubble masks": "氣泡輪廓",
     "Text blocks + panels + bubble grouping": "文字塊 + 分鏡 + 氣泡分組",
     "Text line boxes": "文字行框",
-    "Tap to switch to manga-panel or balloon detection": "點按切換到 manga-panel 或氣泡偵測"
+    "Tap to switch to manga-panel or balloon detection": "點按切換到 manga-panel 或氣泡偵測",
+    "pages": "頁",
+    "Custom imported model": "自訂匯入模型",
+    "A custom imported model is active and overrides this selection.": "自訂匯入模型已啟用，會覆蓋此選擇。",
+    "Using the bundled model": "正在使用內建模型"
   }
 }

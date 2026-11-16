@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:venera/foundation/download_network_guard.dart';
 import 'package:venera/foundation/history.dart';
 import 'package:venera/foundation/log.dart';
+import 'package:venera/foundation/image_translation/translation_models.dart';
 import 'package:venera/foundation/image_translation/translation_store.dart';
 import 'package:venera/foundation/read_later.dart';
 
@@ -106,11 +107,13 @@ class _App {
     rootNavigatorKey.currentState?.maybePop();
   }
 
+  /// Desktop Esc and mouse back. [NavigatorState.maybePop] lets a page's
+  /// PopScope or nested navigator step back one level instead of closing it.
   void pop() {
     if (rootNavigatorKey.currentState?.canPop() ?? false) {
-      rootNavigatorKey.currentState?.pop();
+      rootNavigatorKey.currentState?.maybePop();
     } else if (mainNavigatorKey?.currentState?.canPop() ?? false) {
-      mainNavigatorKey?.currentState?.pop();
+      mainNavigatorKey?.currentState?.maybePop();
     }
   }
 
@@ -148,6 +151,7 @@ class _App {
       domain.init(dataPath),
       local.init(),
       TranslationStore().init(),
+      TranslationModelStore.instance.extractBundledModels(),
     ];
     // One store failing must not abort its siblings: an unguarded Future.wait
     // rejected on the first error and left every later store uninitialized —

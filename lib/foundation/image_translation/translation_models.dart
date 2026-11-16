@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:venera/foundation/app.dart';
 import 'package:venera/foundation/appdata.dart';
 import 'package:venera/foundation/background_keepalive.dart';
@@ -15,9 +16,10 @@ import 'package:venera/utils/translations.dart';
 
 /// A single downloadable file of a model component. [urls] is a fallback
 /// chain: mirrors are tried in order, so a blocked host does not make the
-/// component impossible to install.
+/// component impossible to install. [asset] is an app-bundled copy: when
+/// present the file never needs downloading at all.
 class ModelFile {
-  const ModelFile(this.name, this.urls);
+  const ModelFile(this.name, this.urls, {this.asset});
 
   /// File name inside the component directory.
   final String name;
@@ -25,6 +27,9 @@ class ModelFile {
   /// Candidate URLs. `{hf}` is replaced with the configured HuggingFace
   /// endpoint (official or mirror) at download time.
   final List<String> urls;
+
+  /// Bundled asset path; extracted into the component directory on startup.
+  final String? asset;
 }
 
 /// A downloadable model component (detector / OCR / translator).
@@ -81,20 +86,58 @@ abstract class TranslationModels {
   );
 
   /// Japanese OCR (manga-ocr, vision encoder-decoder). The only reliable
-  /// option for vertical manga text; large but worth it.
+  /// option for vertical manga text. Bundled with the app (ImageTrans's fp16
+  /// conversion — a quarter of the fp32 download); the URLs stay as a
+  /// fallback for installs where extraction did not run.
   static const ocrJa = ModelComponent(
     id: 'ocr_ja',
-    approxSizeBytes: 461000000,
+    approxSizeBytes: 119000000,
     files: [
-      ModelFile('encoder.onnx', [
-        '{hf}/mayocream/manga-ocr-onnx/resolve/main/encoder_model.onnx',
-      ]),
-      ModelFile('decoder.onnx', [
-        '{hf}/mayocream/manga-ocr-onnx/resolve/main/decoder_model.onnx',
-      ]),
-      ModelFile('vocab.txt', [
-        '{hf}/mayocream/manga-ocr-onnx/resolve/main/vocab.txt',
-      ]),
+      ModelFile(
+        'encoder.onnx',
+        ['{hf}/mayocream/manga-ocr-onnx/resolve/main/encoder_model.onnx'],
+        asset: 'assets/translation_models/mangaocr/encoder.onnx',
+      ),
+      ModelFile(
+        'decoder.onnx',
+        ['{hf}/mayocream/manga-ocr-onnx/resolve/main/decoder_model.onnx'],
+        asset: 'assets/translation_models/mangaocr/decoder.onnx',
+      ),
+      ModelFile(
+        'vocab.txt',
+        ['{hf}/mayocream/manga-ocr-onnx/resolve/main/vocab.txt'],
+        asset: 'assets/translation_models/mangaocr/vocab.txt',
+      ),
+    ],
+  );
+
+  /// Bundled RT-DETR text/panel detector (ImageTrans manga-panel). Class 0 =
+  /// panel, 1 = text block; panels drive the reading order.
+  static const mangaPanel = ModelComponent(
+    id: 'detector_manga_panel',
+    approxSizeBytes: 9800000,
+    marker: true,
+    files: [
+      ModelFile(
+        'det.onnx',
+        [],
+        asset: 'assets/translation_models/manga-panel/model.onnx',
+      ),
+    ],
+  );
+
+  /// Bundled legacy balloon segmentation (ImageTrans balloonseg, fp16).
+  /// Balloon interiors group text into blocks; the text channel feeds OCR.
+  static const balloonSeg = ModelComponent(
+    id: 'detector_balloon_seg',
+    approxSizeBytes: 1900000,
+    marker: true,
+    files: [
+      ModelFile(
+        'det.onnx',
+        [],
+        asset: 'assets/translation_models/balloonseg/model.onnx',
+      ),
     ],
   );
 
@@ -161,7 +204,16 @@ abstract class TranslationModels {
     ],
   );
 
-  static const all = [detector, ocrJa, ocrZhV5, ocrZh, ocrEn, ocrKo];
+  static const all = [
+    detector,
+    mangaPanel,
+    balloonSeg,
+    ocrJa,
+    ocrZhV5,
+    ocrZh,
+    ocrEn,
+    ocrKo,
+  ];
 
   static ModelComponent? find(String id) {
     for (var c in all) {
@@ -180,18 +232,47 @@ abstract class TranslationModels {
   };
 
   /// The detector in use: the user's own once it passed its check, otherwise
-  /// the built-in one.
+  /// the selected bundled kind, otherwise the built-in DBNet.
   static ModelComponent get activeDetector {
     var custom = TranslationSources.detector?.component;
-    return custom != null && custom.isInstalled ? custom : detector;
+    if (custom != null && custom.isInstalled) return custom;
+    return switch (activeDetectorKind) {
+      'manga-panel' => mangaPanel.isInstalled ? mangaPanel : detector,
+      'balloon-seg' => balloonSeg.isInstalled ? balloonSeg : detector,
+      'manga-panel-balloon' =>
+        mangaPanel.isInstalled && balloonSeg.isInstalled
+            ? mangaPanel
+            : detector,
+      _ => detector,
+    };
   }
 
   /// The detection backend of [activeDetector]: 'dbnet', 'manga-panel',
-  /// 'balloon-seg' or 'manga-panel-balloon'.
+  /// 'balloon-seg' or 'manga-panel-balloon'. A user-imported detector wins
+  /// over the bundled selection; the bundled default is the legacy balloon
+  /// segmentation, so a fresh install translates out of the box with
+  /// bubble detection + manga-ocr.
   static String get activeDetectorKind {
     var custom = TranslationSources.detector;
     if (custom != null && custom.component.isInstalled) return custom.kind;
-    return 'dbnet';
+    var kind = appdata.settings['imageTranslationDetectorKind'];
+    if (kind is String && _bundledKinds.contains(kind)) return kind;
+    return 'balloon-seg';
+  }
+
+  static const _bundledKinds = {
+    'dbnet',
+    'manga-panel',
+    'balloon-seg',
+    'manga-panel-balloon',
+  };
+
+  /// Sets the bundled detector kind selection.
+  static void setDetectorKind(String kind) {
+    if (!_bundledKinds.contains(kind)) return;
+    appdata.settings['imageTranslationDetectorKind'] = kind;
+    appdata.saveData();
+    invalidateReadyCache();
   }
 
   /// Model file paths for the worker isolate, containing only what is
@@ -217,12 +298,24 @@ abstract class TranslationModels {
     var jaComponent = TranslationSources.activeJaOcr;
     var hasJa = jaComponent.isInstalled;
     var detectorKind = activeDetectorKind;
+    var detectorPath = activeDetector.filePath('det.onnx');
+    // The combined backend carries the balloon segmentation model as its
+    // second file; a user-imported combined detector stores it as
+    // balloon.onnx, the bundled one lives in its own component directory.
+    String? balloonPath;
+    if (detectorKind == 'manga-panel-balloon') {
+      var custom = TranslationSources.detector;
+      if (custom != null && custom.component.isInstalled) {
+        balloonPath = custom.component.filePath('balloon.onnx');
+      } else if (balloonSeg.isInstalled) {
+        balloonPath = balloonSeg.filePath('det.onnx');
+      }
+      if (balloonPath == null) detectorPath = detector.filePath('det.onnx');
+    }
     return WorkerModelPaths(
-      detector: activeDetector.filePath('det.onnx'),
+      detector: detectorPath,
       detectorKind: detectorKind,
-      balloonModel: detectorKind == 'manga-panel-balloon'
-          ? activeDetector.filePath('balloon.onnx')
-          : null,
+      balloonModel: balloonPath,
       jaEncoder: hasJa ? jaComponent.filePath('encoder.onnx') : null,
       jaDecoder: hasJa ? jaComponent.filePath('decoder.onnx') : null,
       jaVocab: hasJa ? jaComponent.filePath('vocab.txt') : null,
@@ -341,6 +434,57 @@ class TranslationModelStore with ChangeNotifier {
   final _cancelTokens = <String, CancelToken>{};
   final _downloads = <String, Completer<void>>{};
   final _deleting = <String>{};
+
+  /// Copies the app-bundled model files (manga-ocr fp16, manga-panel,
+  /// balloonseg) into their component directories on first launch, so the
+  /// AI translation button works out of the box: legacy balloon detection +
+  /// manga-ocr recognition, zero downloads. Already-extracted files are left
+  /// alone; a failed copy logs and moves on (the download URLs remain the
+  /// fallback for the OCR model).
+  Future<void> extractBundledModels() async {
+    var changed = false;
+    for (var component in TranslationModels.all) {
+      var hasBundled = false;
+      for (var file in component.files) {
+        var asset = file.asset;
+        if (asset == null) continue;
+        hasBundled = true;
+        var target = File(component.filePath(file.name));
+        if (target.existsSync() && target.lengthSync() > 0) continue;
+        try {
+          var data = await rootBundle.load(asset);
+          Directory(component.directory).createSync(recursive: true);
+          await target.writeAsBytes(
+            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+            flush: true,
+          );
+          changed = true;
+        } catch (e) {
+          Log.error(
+            'Translation Models',
+            'Bundled model extraction failed: $asset ($e)',
+          );
+        }
+      }
+      // Bundled files are known good: write the verified marker so marker
+      // components report installed without a check run.
+      if (hasBundled &&
+          component.marker &&
+          component.isInstalled == false &&
+          component.files.every(
+            (f) => File(component.filePath(f.name)).existsSync(),
+          )) {
+        File(
+          component.filePath(ModelComponent.markerName),
+        ).writeAsStringSync('');
+        changed = true;
+      }
+    }
+    if (changed) {
+      TranslationModels.invalidateReadyCache();
+      notifyListeners();
+    }
+  }
 
   ModelDownloadState stateOf(ModelComponent component) {
     return _states.putIfAbsent(component.id, () => ModelDownloadState());

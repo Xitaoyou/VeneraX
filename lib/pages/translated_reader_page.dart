@@ -212,7 +212,11 @@ class _TranslatedChapterReaderPageState
         scrollbarTopPadding: context.padding.top + 56,
         slivers: [
           SliverAppbar(
-            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            title: Text(
+              '$title  ·  ${_keys.length} ${"pages".tl}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (_loading)
             SliverFillRemaining(
@@ -288,35 +292,16 @@ class _PageViewState extends State<_PageView> {
           );
         }
         if (snapshot.data == null) {
-          return const Padding(
-            padding: EdgeInsets.all(32),
+          return const SizedBox(
+            height: 400,
             child: Center(child: CircularProgressIndicator()),
           );
         }
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: Image.memory(snapshot.data!, fit: BoxFit.contain),
-            ),
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${widget.page} / ${widget.total}',
-                  style: ts.s12.copyWith(color: Colors.white),
-                ),
-              ),
-            ),
-          ],
+        // Image sizes itself from its intrinsic aspect ratio; a Stack with
+        // only Positioned.fill children has no size and rendered nothing.
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Image.memory(snapshot.data!, fit: BoxFit.contain),
         );
       },
     );
