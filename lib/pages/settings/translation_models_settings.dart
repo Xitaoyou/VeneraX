@@ -35,6 +35,7 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
     return switch (id) {
       'text_detector' => "Text detector".tl,
       'ocr_ja' => "Japanese OCR (manga)".tl,
+      'ocr_ja_custom' => "Japanese OCR (imported)".tl,
       'ocr_zh_v5' => "Chinese OCR (Simplified + Traditional)".tl,
       'ocr_zh' => "Chinese / Latin OCR".tl,
       'ocr_en' => "English OCR".tl,
@@ -85,6 +86,7 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
           for (var component in TranslationModels.all)
             if (component.id != 'text_detector')
               _buildComponent(context, component, requiredIds).toSliver(),
+          _buildJaOcrImport(context).toSliver(),
           const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
         ],
       ),
@@ -101,6 +103,88 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
         ),
       ),
     );
+  }
+
+  /// Import row for a user-supplied manga-ocr conversion (encoder/decoder/
+  /// vocab from local files), e.g. ImageTrans's fp16 weights. When active it
+  /// replaces the downloaded Japanese OCR component everywhere.
+  Widget _buildJaOcrImport(BuildContext context) {
+    var custom = TranslationSources.jaOcr;
+    var active = custom != null && custom.component.isInstalled;
+    var component = custom?.component ?? CustomJaOcrModel().component;
+    var state = TranslationModelStore.instance.stateOf(component);
+    var importing = state.downloading;
+    Widget trailing;
+    if (importing) {
+      trailing = SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.4,
+          value: state.progress <= 0 ? null : state.progress,
+        ),
+      );
+    } else if (active) {
+      trailing = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, color: context.colorScheme.primary),
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: "Use the downloaded model again".tl,
+            onPressed: () {
+              TranslationSources.setJaOcr(null);
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      );
+    } else {
+      trailing = Button.filled(
+        onPressed: () => _importJaOcr(),
+        child: Text("Import".tl),
+      ).fixHeight(32);
+    }
+    var subtitle = active
+        ? "Using the imported model".tl
+        : "Import a manga-ocr encoder/decoder/vocab triple from local files, e.g. ImageTrans's fp16 weights (smaller and faster than the download)."
+              .tl;
+    if (state.error != null) {
+      subtitle += "\\n${"Import failed".tl}: ${state.error}";
+    }
+    return ListTile(
+      title: Text("Japanese OCR (imported)".tl),
+      subtitle: Text(subtitle),
+      isThreeLine: !active && state.error == null,
+      trailing: trailing,
+    );
+  }
+
+  Future<void> _importJaOcr() async {
+    var encoder = await selectFile(ext: ['onnx']);
+    if (encoder == null) return;
+    var decoder = await selectFile(ext: ['onnx']);
+    if (decoder == null) return;
+    var vocab = await selectFile(ext: ['txt']);
+    if (vocab == null) return;
+    var model = CustomJaOcrModel();
+    await TranslationModelStore.instance.importFiles(
+      model.component,
+      [
+        ('encoder.onnx', encoder.path),
+        ('decoder.onnx', decoder.path),
+        ('vocab.txt', vocab.path),
+      ],
+      verify: () => checkJaOcrModel(
+        model.component.filePath('encoder.onnx'),
+        model.component.filePath('decoder.onnx'),
+        model.component.filePath('vocab.txt'),
+      ),
+    );
+    if (model.component.isInstalled) {
+      TranslationSources.setJaOcr(model);
+    }
+    if (mounted) setState(() {});
   }
 
   Widget _buildComponent(

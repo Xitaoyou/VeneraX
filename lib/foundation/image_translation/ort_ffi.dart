@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -28,6 +29,7 @@ class OrtRuntime {
   // ONNXTensorElementDataType
   static const typeFloat32 = 1;
   static const typeInt64 = 7;
+  static const typeFloat16 = 10;
 
   static OrtRuntime open() {
     if (_instance != null) {
@@ -213,11 +215,16 @@ class OrtRuntime {
 
 /// A float32 or int64 input tensor description.
 class OrtInput {
-  OrtInput.float32(Float32List this.f32Data, this.shape) : i64Data = null;
-  OrtInput.int64(Int64List this.i64Data, this.shape) : f32Data = null;
+  OrtInput.float32(Float32List this.f32Data, this.shape) : i64Data = null, u16Data = null;
+  OrtInput.int64(Int64List this.i64Data, this.shape) : f32Data = null, u16Data = null;
+
+  /// IEEE 754 half-precision values packed as uint16, for models exported
+  /// with FLOAT16 inputs (e.g. balloon segmentation).
+  OrtInput.float16(Uint16List this.u16Data, this.shape) : f32Data = null, i64Data = null;
 
   final Float32List? f32Data;
   final Int64List? i64Data;
+  final Uint16List? u16Data;
   final List<int> shape;
 }
 
@@ -374,15 +381,20 @@ class OrtFfiSession {
 
   /// Runs the session. Returns outputs in [requestedOutputs] order (all
   /// outputs when null). Blocking; worker isolate only.
+  ///
+  /// With [fp16Outputs] the tensors are FLOAT16: the raw uint16 payload is
+  /// converted to float32 before returning (used by fp16 segmentation models,
+  /// whose IO dtype is fixed by the graph).
   Map<String, OrtOutput> run(
     Map<String, OrtInput> inputs, {
     List<String>? requestedOutputs,
+    bool fp16Outputs = false,
   }) {
     var outputs = requestedOutputs ?? outputNames;
     return _execute(inputs, outputs, (values) {
       var result = <String, OrtOutput>{};
       for (var i = 0; i < outputs.length; i++) {
-        result[outputs[i]] = _readOutput(values[i]);
+        result[outputs[i]] = _readOutput(values[i], fp16: fp16Outputs);
       }
       return result;
     });
@@ -480,6 +492,13 @@ class OrtFfiSession {
             dataPtr = p.cast();
             byteLength = data.length * 4;
             elementType = OrtRuntime.typeFloat32;
+          } else if (input.u16Data != null) {
+            var data = input.u16Data!;
+            var p = calloc<Uint16>(data.length);
+            p.asTypedList(data.length).setAll(0, data);
+            dataPtr = p.cast();
+            byteLength = data.length * 2;
+            elementType = OrtRuntime.typeFloat16;
           } else {
             var data = input.i64Data!;
             var p = calloc<Int64>(data.length);
@@ -647,7 +666,7 @@ class OrtFfiSession {
     }
   }
 
-  OrtOutput _readOutput(Pointer<Void> value) {
+  OrtOutput _readOutput(Pointer<Void> value, {bool fp16 = false}) {
     var rt = _rt;
     var (shape, elementCount) = _readShape(value);
     var dataOut = calloc<Pointer<Void>>();
@@ -663,6 +682,10 @@ class OrtFfiSession {
           >();
       rt._check(getData(value, dataOut));
       // Copy out: the OrtValue is released right after this call.
+      if (fp16) {
+        var view = dataOut.value.cast<Uint16>().asTypedList(elementCount);
+        return OrtOutput(halfToFloatList(view), shape);
+      }
       var view = dataOut.value.cast<Float>().asTypedList(elementCount);
       return OrtOutput(Float32List.fromList(view), shape);
     } finally {
@@ -673,4 +696,59 @@ class OrtFfiSession {
   void close() {
     _rt._releaser(OrtRuntime._iReleaseSession)(_session);
   }
+}
+
+/// Converts an IEEE 754 binary16 value (as stored in a uint16) to float32.
+double halfToFloat(int bits) {
+  var sign = (bits & 0x8000) != 0;
+  var exp = (bits >> 10) & 0x1F;
+  var frac = bits & 0x3FF;
+  double value;
+  if (exp == 0) {
+    value = frac * 5.960464477539063e-8; // 2^-24, subnormal
+  } else if (exp == 31) {
+    value = frac == 0 ? double.infinity : double.nan;
+  } else {
+    value = (1.0 + frac / 1024.0) * math.pow(2.0, exp - 15).toDouble();
+  }
+  return sign ? -value : value;
+}
+
+/// Converts an IEEE 754 binary16 buffer to float32.
+Float32List halfToFloatList(Uint16List input) {
+  var out = Float32List(input.length);
+  for (var i = 0; i < input.length; i++) {
+    out[i] = halfToFloat(input[i]);
+  }
+  return out;
+}
+
+/// Rounds a float32 to IEEE 754 binary16 (nearest, ties to even-ish via the
+/// standard increment; carry into the exponent is handled by the increment).
+int floatToHalf(double value) {
+  var buf = Float32List(1)..[0] = value;
+  var bits = buf.buffer.asUint32List()[0];
+  var sign = (bits >> 16) & 0x8000;
+  var exp = ((bits >> 23) & 0xFF) - 127 + 15;
+  var mantissa = bits & 0x7FFFFF;
+  if (exp >= 31) return sign | 0x7C00; // overflow -> infinity
+  if (exp <= 0) {
+    if (exp < -10) return sign; // underflow -> zero
+    mantissa = (mantissa | 0x800000) >> (1 - exp);
+    var half = sign | (mantissa >> 13);
+    if ((mantissa & 0x1000) != 0) half++;
+    return half;
+  }
+  var half = sign | (exp << 10) | (mantissa >> 13);
+  if ((mantissa & 0x1000) != 0) half++;
+  return half;
+}
+
+/// Converts a float32 buffer to packed binary16.
+Uint16List floatToHalfList(Float32List input) {
+  var out = Uint16List(input.length);
+  for (var i = 0; i < input.length; i++) {
+    out[i] = floatToHalf(input[i]);
+  }
+  return out;
 }

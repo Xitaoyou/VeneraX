@@ -987,6 +987,38 @@ class TranslationStore with ChangeNotifier {
     }
   }
 
+  /// The stored page keys under [scopePrefix], in the chapter's page order.
+  /// Keys are lexicographically unordered across page numbers (`p10@` sorts
+  /// before `p2@`), so the 1-based `p<N>@` tail ordinal is parsed and sorted
+  /// numerically; keys without it keep a stable secondary position.
+  List<String> pageKeysByPrefix(String scopePrefix) {
+    if (!isInitialized) return const [];
+    try {
+      var keys = _db
+          .select(
+            "select cache_key from translated_page "
+            "where cache_key >= ? and cache_key < ?;",
+            [scopePrefix, _prefixEnd(scopePrefix)],
+          )
+          .map((r) => r['cache_key'] as String)
+          .toList();
+      int ordinal(String key) {
+        var match = RegExp(r'p(\d+)@$').firstMatch(key);
+        return match == null ? 1 << 30 : int.parse(match.group(1)!);
+      }
+
+      keys.sort((a, b) {
+        var byOrdinal = ordinal(a).compareTo(ordinal(b));
+        if (byOrdinal != 0) return byOrdinal;
+        return a.compareTo(b);
+      });
+      return keys;
+    } catch (e, s) {
+      Log.error("TranslationStore", "pageKeysByPrefix failed: $e", s);
+      return const [];
+    }
+  }
+
   void close() {
     if (!isInitialized) return;
     _notifyTimer?.cancel();

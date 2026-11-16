@@ -752,6 +752,66 @@ class _SelectPreTranslateChapterState extends State<_SelectPreTranslateChapter>
   }
 
   /// One checkbox row for the flat chapter index [i].
+  /// The stored-chapter row for chapter tile [i], or null when nothing is
+  /// stored under its scope.
+  StoredTranslationChapter? _storedChapterFor(int i) {
+    var eid = widget.entries[i].$1;
+    for (var chapter in TranslationStore().chaptersFor(
+      widget.sourceKey,
+      widget.cid,
+    )) {
+      if (chapter.identity.chapterId == eid) return chapter;
+    }
+    return null;
+  }
+
+  void _readChapter(int i) {
+    var chapter = _storedChapterFor(i);
+    if (chapter == null) {
+      context.showMessage(message: "No stored pages".tl);
+      return;
+    }
+    context.to(() => TranslatedChapterReaderPage(chapter: chapter));
+  }
+
+  Future<void> _exportChapter(int i) async {
+    var chapter = _storedChapterFor(i);
+    if (chapter == null) {
+      context.showMessage(message: "No stored pages".tl);
+      return;
+    }
+    var directory = await selectDirectory();
+    if (directory == null) return;
+    var controller = showLoadingDialog(
+      context,
+      allowCancel: false,
+      withProgress: true,
+      message: 'Export translated pages'.tl,
+    );
+    try {
+      var (written, skipped) =
+          await TranslatedChapterReaderPage.exportChapter(
+        chapter,
+        directory,
+        onProgress: (done, total) {
+          controller.setProgress(
+            total == 0 ? null : done / total,
+          );
+        },
+      );
+      App.rootContext.showMessage(
+        message: '@written pages exported, @skipped skipped'.tlParams({
+          'written': written,
+          'skipped': skipped,
+        }),
+      );
+    } catch (e) {
+      App.rootContext.showMessage(message: e.toString());
+    } finally {
+      controller.close();
+    }
+  }
+
   Widget _buildChapterTile(int i) {
     var title = widget.entries[i].$2;
     var eid = widget.entries[i].$1;
@@ -778,6 +838,16 @@ class _SelectPreTranslateChapterState extends State<_SelectPreTranslateChapter>
           else if (hasIdleTranslation)
             MenuButton(
               entries: [
+                MenuEntry(
+                  icon: Icons.menu_book_rounded,
+                  text: "Read".tl,
+                  onClick: () => _readChapter(i),
+                ),
+                MenuEntry(
+                  icon: Icons.save_alt_rounded,
+                  text: "Export translated pages".tl,
+                  onClick: () => _exportChapter(i),
+                ),
                 MenuEntry(
                   icon: Icons.refresh_rounded,
                   text: "Re-translate".tl,

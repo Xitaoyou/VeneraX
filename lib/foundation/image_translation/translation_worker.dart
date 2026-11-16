@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:venera/foundation/app.dart';
+import 'package:venera/foundation/image_translation/bubble_detection.dart';
 import 'package:venera/foundation/image_translation/hf_tokenizer.dart';
 import 'package:venera/foundation/image_translation/ort_ffi.dart';
 import 'package:venera/foundation/image_translation/translation_types.dart';
@@ -16,6 +17,8 @@ import 'package:venera/utils/io.dart';
 class WorkerModelPaths {
   WorkerModelPaths({
     required this.detector,
+    this.detectorKind = 'dbnet',
+    this.balloonModel,
     this.jaEncoder,
     this.jaDecoder,
     this.jaVocab,
@@ -27,6 +30,19 @@ class WorkerModelPaths {
   });
 
   final String detector;
+
+  /// Which detection backend [detector] drives:
+  /// - 'dbnet': PP-OCR DBNet probability map (built-in).
+  /// - 'manga-panel': RT-DETR object detector, [x1,y1,x2,y2,conf,class] rows;
+  ///   class 0 = panel, 1 = text block.
+  /// - 'balloon-seg': legacy balloon segmentation (fp16, 3-channel logits).
+  /// - 'manga-panel-balloon': manga-panel for text/panels plus the balloon
+  ///   segmentation model in [balloonModel] for grouping.
+  final String detectorKind;
+
+  /// Balloon segmentation model path, used when [detectorKind] includes it.
+  final String? balloonModel;
+
   final String? jaEncoder;
   final String? jaDecoder;
   final String? jaVocab;
@@ -103,9 +119,10 @@ Future<void> checkRecognitionModel(String model, String dict, int height) {
   });
 }
 
-/// Runs a detection model once and checks it returns a DBNet probability map
-/// the size of its input.
-Future<void> checkDetectionModel(String model) {
+/// Runs a detection model once and checks it matches the expectations of
+/// [kind]: a DBNet probability map ('dbnet'), an RT-DETR detection head
+/// ('manga-panel'), or the fp16 balloon segmentation logits ('balloon-seg').
+Future<void> checkDetectionModel(String model, {String kind = 'dbnet'}) {
   return Isolate.run(() {
     OrtFfiSession session;
     OrtOutput output;
@@ -115,20 +132,109 @@ Future<void> checkDetectionModel(String model) {
       throw const ModelCheckException(ModelCheckFailure.cannotRun);
     }
     try {
-      output = session.run({
-        session.inputNames.first: OrtInput.float32(
-          Float32List(3 * 64 * 64),
-          const [1, 3, 64, 64],
-        ),
-      }).values.first;
+      switch (kind) {
+        case 'manga-panel':
+          output = session.run({
+            session.inputNames.first: OrtInput.float32(
+              Float32List(3 * 640 * 640),
+              const [1, 3, 640, 640],
+            ),
+          }).values.first;
+          var s = output.shape;
+          // RT-DETR head: [1, 300, 6] rows of [x1,y1,x2,y2,conf,class].
+          if (s.length != 3 || s[2] != 6) {
+            throw const ModelCheckException(ModelCheckFailure.notDetector);
+          }
+        case 'balloon-seg':
+          output = session.run({
+            session.inputNames.first: OrtInput.float16(
+              Uint16List(1024 * 768),
+              const [1, 1024, 768, 1],
+            ),
+          }, fp16Outputs: true).values.first;
+          var s = output.shape;
+          // Segmentation head: [1, 1024, 768, 3] logits.
+          if (s.length != 4 || s[1] != 1024 || s[2] != 768 || s[3] != 3) {
+            throw const ModelCheckException(ModelCheckFailure.notDetector);
+          }
+        default:
+          output = session.run({
+            session.inputNames.first: OrtInput.float32(
+              Float32List(3 * 64 * 64),
+              const [1, 3, 64, 64],
+            ),
+          }).values.first;
+          var s = output.shape;
+          if (s.length != 4 || s[1] != 1 || s[2] != 64 || s[3] != 64) {
+            throw const ModelCheckException(ModelCheckFailure.notDetector);
+          }
+      }
+    } on ModelCheckException {
+      rethrow;
     } catch (_) {
       throw const ModelCheckException(ModelCheckFailure.cannotRun);
     } finally {
       session.close();
     }
-    var s = output.shape;
-    if (s.length != 4 || s[1] != 1 || s[2] != 64 || s[3] != 64) {
-      throw const ModelCheckException(ModelCheckFailure.notDetector);
+  });
+}
+
+/// Runs a manga-ocr encoder/decoder pair once and checks the shapes match the
+/// vocab the user supplied alongside them.
+Future<void> checkJaOcrModel(String encoder, String decoder, String vocab) {
+  return Isolate.run(() {
+    var entries = File(vocab).readAsLinesSync().length;
+    OrtFfiSession enc;
+    OrtOutput hidden;
+    try {
+      enc = OrtFfiSession.open(encoder, intraOpThreads: 1);
+    } catch (_) {
+      throw const ModelCheckException(ModelCheckFailure.cannotRun);
+    }
+    OrtFfiSession? dec;
+    try {
+      hidden = enc.run({
+        enc.inputNames.first: OrtInput.float32(
+          Float32List(3 * 224 * 224),
+          const [1, 3, 224, 224],
+        ),
+      }).values.first;
+      if (hidden.shape.length != 3) {
+        throw const ModelCheckException(ModelCheckFailure.notRecognizer);
+      }
+      dec = OrtFfiSession.open(decoder, intraOpThreads: 1);
+      var logits = dec
+          .run({
+            'input_ids': OrtInput.int64(
+              Int64List.fromList([2]),
+              const [1, 1],
+            ),
+            'encoder_hidden_states': OrtInput.float32(
+              hidden.data,
+              hidden.shape,
+            ),
+          }, requestedOutputs: [dec.outputNames.first])
+          .values
+          .first;
+      var classes = logits.shape.last;
+      // The vocab may or may not carry the special tokens the decoder head
+      // knows; a small delta is fine, a mismatch is not.
+      if ((classes - entries).abs() > 2) {
+        throw ModelCheckException(
+          ModelCheckFailure.dictionaryMismatch,
+          classes: classes,
+          entries: entries,
+        );
+      }
+    } on ModelCheckException {
+      rethrow;
+    } catch (_) {
+      throw const ModelCheckException(ModelCheckFailure.cannotRun);
+    } finally {
+      enc.close();
+      try {
+        dec?.close();
+      } catch (_) {}
     }
   });
 }
@@ -549,10 +655,10 @@ class _WorkerState {
       req.height,
       req.pixels.materialize().asUint8List(),
     );
-    var boxes = _detectBoxes(image, req.paths);
-    if (boxes.isEmpty) return const [];
-    var clusters = clusterOcrBoxes(boxes, image.width, image.height);
-    clusters.sort((a, b) => _boundsOf(a).top.compareTo(_boundsOf(b).top));
+    var det = _detect(image, req.paths);
+    if (det.textBoxes.isEmpty) return const [];
+    var clusters = _groupTextRegions(det, image.width, image.height);
+    _sortClusters(clusters, det.panels);
     const maxBlocks = 32;
     if (clusters.length > maxBlocks) {
       clusters = clusters.sublist(0, maxBlocks);
@@ -692,7 +798,158 @@ class _WorkerState {
 
   // ----- detection -----
 
-  List<IntRect> _detectBoxes(RgbaImage image, WorkerModelPaths paths) {
+  /// Everything detection produced for one page: text boxes to recognize,
+  /// panel boxes (reading order) and balloon boxes (block grouping).
+  _PageDetection _detect(RgbaImage image, WorkerModelPaths paths) {
+    switch (paths.detectorKind) {
+      case 'manga-panel':
+      case 'manga-panel-balloon':
+        var detections = runMangaPanelDetector(_session(paths.detector), image);
+        var text = <IntRect>[
+          for (var d in detections)
+            if (d.cls == 1) d.box,
+        ];
+        var panels = <IntRect>[
+          for (var d in detections)
+            if (d.cls == 0) d.box,
+        ];
+        var balloons = <IntRect>[];
+        var balloonPath = paths.balloonModel;
+        if (balloonPath != null) {
+          var seg = runBalloonSegmenter(_session(balloonPath), image);
+          balloons = seg.balloons;
+          // The segmenter catches bubble text the detector missed; adopt
+          // those regions that do not already overlap a detected box.
+          for (var t in seg.texts) {
+            if (!text.any((b) => _iou(b, t) > 0.3)) {
+              text.add(t);
+            }
+          }
+        }
+        return _PageDetection(text, panels, balloons);
+      case 'balloon-seg':
+        var seg = runBalloonSegmenter(_session(paths.detector), image);
+        return _PageDetection(seg.texts, const [], seg.balloons);
+      default:
+        return _PageDetection(_detectBoxesDbNet(image, paths), const [], const []);
+    }
+  }
+
+  /// Groups text boxes into OCR blocks: by balloon when balloons are present
+  /// (one bubble = one block), else by shared panel, else heuristically.
+  List<List<IntRect>> _groupTextRegions(
+    _PageDetection det,
+    int width,
+    int height,
+  ) {
+    if (det.balloons.isNotEmpty) {
+      return _groupByBalloons(det.textBoxes, det.balloons, width, height);
+    }
+    if (det.panels.isNotEmpty) {
+      return _groupWithinPanels(det.textBoxes, det.panels, width, height);
+    }
+    return clusterOcrBoxes(det.textBoxes, width, height);
+  }
+
+  /// One balloon = one block: every text box whose center falls inside a
+  /// balloon joins it; leftovers cluster among themselves.
+  List<List<IntRect>> _groupByBalloons(
+    List<IntRect> texts,
+    List<IntRect> balloons,
+    int width,
+    int height,
+  ) {
+    var clusters = <List<IntRect>>[];
+    var assigned = List<bool>.filled(texts.length, false);
+    for (var balloon in balloons) {
+      var inside = <IntRect>[];
+      for (var i = 0; i < texts.length; i++) {
+        if (assigned[i]) continue;
+        var t = texts[i];
+        var cx = (t.left + t.right) / 2;
+        var cy = (t.top + t.bottom) / 2;
+        if (cx >= balloon.left &&
+            cx <= balloon.right &&
+            cy >= balloon.top &&
+            cy <= balloon.bottom) {
+          inside.add(t);
+          assigned[i] = true;
+        }
+      }
+      if (inside.isNotEmpty) clusters.add(inside);
+    }
+    var rest = [
+      for (var i = 0; i < texts.length; i++)
+        if (!assigned[i]) texts[i],
+    ];
+    if (rest.isNotEmpty) clusters.addAll(clusterOcrBoxes(rest, width, height));
+    return clusters;
+  }
+
+  /// Text boxes sharing a panel cluster together (then heuristically within
+  /// the panel); text outside any panel clusters on its own.
+  List<List<IntRect>> _groupWithinPanels(
+    List<IntRect> texts,
+    List<IntRect> panels,
+    int width,
+    int height,
+  ) {
+    var groups = <int, List<IntRect>>{};
+    var rest = <IntRect>[];
+    for (var t in texts) {
+      var cx = (t.left + t.right) / 2;
+      var cy = (t.top + t.bottom) / 2;
+      int? panel;
+      for (var i = 0; i < panels.length; i++) {
+        var p = panels[i];
+        if (cx >= p.left && cx <= p.right && cy >= p.top && cy <= p.bottom) {
+          panel = i;
+          break;
+        }
+      }
+      if (panel == null) {
+        rest.add(t);
+      } else {
+        groups.putIfAbsent(panel, () => []).add(t);
+      }
+    }
+    var clusters = <List<IntRect>>[];
+    for (var group in groups.values) {
+      clusters.addAll(clusterOcrBoxes(group, width, height));
+    }
+    if (rest.isNotEmpty) clusters.addAll(clusterOcrBoxes(rest, width, height));
+    return clusters;
+  }
+
+  /// Reading order: panels in manga order when present, clusters inside them
+  /// in manga order, then everything outside.
+  void _sortClusters(List<List<IntRect>> clusters, List<IntRect> panels) {
+    if (panels.isEmpty) {
+      clusters.sort((a, b) => compareMangaBlocks(_boundsOf(a), _boundsOf(b)));
+      return;
+    }
+    var ordered = [...panels]..sort(compareMangaBlocks);
+    int panelIndex(IntRect b) {
+      var cx = (b.left + b.right) / 2;
+      var cy = (b.top + b.bottom) / 2;
+      for (var i = 0; i < ordered.length; i++) {
+        var p = ordered[i];
+        if (cx >= p.left && cx <= p.right && cy >= p.top && cy <= p.bottom) {
+          return i;
+        }
+      }
+      return ordered.length;
+    }
+
+    clusters.sort((a, b) {
+      var pa = panelIndex(_boundsOf(a));
+      var pb = panelIndex(_boundsOf(b));
+      if (pa != pb) return pa.compareTo(pb);
+      return compareMangaBlocks(_boundsOf(a), _boundsOf(b));
+    });
+  }
+
+  List<IntRect> _detectBoxesDbNet(RgbaImage image, WorkerModelPaths paths) {
     var session = _session(paths.detector);
     var boxes = <IntRect>[];
     const tileHeight = 1280;
@@ -900,6 +1157,15 @@ class _DetInput {
   final Float32List tensor;
   final int width;
   final int height;
+}
+
+/// Detection results of one page before grouping.
+class _PageDetection {
+  _PageDetection(this.textBoxes, this.panels, this.balloons);
+
+  final List<IntRect> textBoxes;
+  final List<IntRect> panels;
+  final List<IntRect> balloons;
 }
 
 Uint8List _resizeRegion(RgbaImage src, IntRect region, int outW, int outH) {

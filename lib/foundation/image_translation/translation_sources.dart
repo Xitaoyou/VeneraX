@@ -75,30 +75,90 @@ class CustomSourceLanguage {
   }
 }
 
-/// A user-supplied text detection model (PP-OCR DBNet, ONNX) replacing the
-/// built-in detector. Language independent.
+/// A user-supplied text detection model replacing the built-in detector.
+/// Language independent. [kind] selects the inference backend:
+/// - 'dbnet': PP-OCR DBNet probability map (URL download or local import).
+/// - 'manga-panel': RT-DETR text/panel detector (local import).
+/// - 'balloon-seg': legacy balloon segmentation (local import).
+/// - 'manga-panel-balloon': RT-DETR plus the balloon segmentation model
+///   (local import, two files).
 class CustomDetectorModel {
-  const CustomDetectorModel({required this.url, this.sizeBytes = 0});
+  const CustomDetectorModel({
+    required this.url,
+    this.sizeBytes = 0,
+    this.kind = 'dbnet',
+  });
 
   final String url;
   final int sizeBytes;
 
+  /// 'dbnet' | 'manga-panel' | 'balloon-seg' | 'manga-panel-balloon'.
+  final String kind;
+
+  /// Whether this kind needs the balloon segmentation model as a second file.
+  bool get needsBalloonModel => kind == 'manga-panel-balloon';
+
   ModelComponent get component => ModelComponent(
-    id: 'detector_${modelHash(url)}',
+    id: 'detector_${modelHash('$kind\n$url')}',
     approxSizeBytes: sizeBytes,
     marker: true,
     files: [
-      ModelFile('det.onnx', [url]),
+      ModelFile('det.onnx', [if (url.isNotEmpty) url]),
+      if (needsBalloonModel) const ModelFile('balloon.onnx', []),
     ],
   );
 
-  Map<String, dynamic> toJson() => {'url': url, 'size': sizeBytes};
+  Map<String, dynamic> toJson() => {
+    'url': url,
+    'size': sizeBytes,
+    'kind': kind,
+  };
+
+  static CustomDetectorModel? fromJson(Object? item) {
+    if (item is! Map) return null;
+    var url = '${item['url'] ?? ''}'.trim();
+    var kind = '${item['kind'] ?? 'dbnet'}';
+    const kinds = {'dbnet', 'manga-panel', 'balloon-seg', 'manga-panel-balloon'};
+    if (!kinds.contains(kind)) kind = 'dbnet';
+    // URL models must have a valid URL; imported models carry no URL.
+    if (url.isNotEmpty && !TranslationSources.isValidUrl(url)) return null;
+    var size = item['size'] is int ? item['size'] as int : 0;
+    return CustomDetectorModel(url: url, sizeBytes: size, kind: kind);
+  }
+}
+
+/// A user-supplied manga-ocr encoder/decoder/vocab triple (local import)
+/// replacing the downloaded Japanese OCR component.
+class CustomJaOcrModel {
+  const CustomJaOcrModel({this.sizeBytes = 0});
+
+  final int sizeBytes;
+
+  ModelComponent get component => const ModelComponent(
+    id: 'ocr_ja_custom',
+    approxSizeBytes: 0,
+    marker: true,
+    files: [
+      ModelFile('encoder.onnx', []),
+      ModelFile('decoder.onnx', []),
+      ModelFile('vocab.txt', []),
+    ],
+  );
+
+  Map<String, dynamic> toJson() => {'size': sizeBytes};
+
+  static CustomJaOcrModel? fromJson(Object? item) {
+    if (item is! Map) return null;
+    var size = item['size'] is int ? item['size'] as int : 0;
+    return CustomJaOcrModel(sizeBytes: size);
+  }
 }
 
 /// Source languages: the built-in set plus the user's own.
 abstract class TranslationSources {
   static const settingKey = 'imageTranslationCustomSources';
   static const detectorKey = 'imageTranslationCustomDetector';
+  static const jaOcrKey = 'imageTranslationCustomJaOcr';
 
   /// code -> English UI label. Codes are part of stored translation keys and
   /// of the per-comic language locks, so they must never change.
@@ -198,9 +258,36 @@ abstract class TranslationSources {
     appdata.settings[detectorKey] = model?.toJson() ?? <String, dynamic>{};
     appdata.saveData();
     TranslationModels.invalidateReadyCache();
-    if (old != null && old.url != model?.url) {
+    if (old != null && old.component.id != model?.component.id) {
       TranslationModelStore.instance.delete(old.component);
     }
+  }
+
+  static CustomJaOcrModel? get jaOcr {
+    var raw = appdata.settings[jaOcrKey];
+    if (raw is! Map) return null;
+    return CustomJaOcrModel.fromJson(raw);
+  }
+
+  /// Sets or clears (null) the custom Japanese OCR model.
+  static void setJaOcr(CustomJaOcrModel? model) {
+    var old = jaOcr;
+    appdata.settings[jaOcrKey] = model?.toJson() ?? <String, dynamic>{};
+    appdata.saveData();
+    TranslationModels.invalidateReadyCache();
+    if (old != null && model == null) {
+      TranslationModelStore.instance.delete(old.component);
+    }
+  }
+
+  /// The Japanese OCR component in use: the user's imported one when it is
+  /// installed, otherwise the downloaded one.
+  static ModelComponent get activeJaOcr {
+    var custom = jaOcr;
+    if (custom != null && custom.component.isInstalled) {
+      return custom.component;
+    }
+    return TranslationModels.ocrJa;
   }
 }
 

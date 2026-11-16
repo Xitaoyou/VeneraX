@@ -186,6 +186,14 @@ abstract class TranslationModels {
     return custom != null && custom.isInstalled ? custom : detector;
   }
 
+  /// The detection backend of [activeDetector]: 'dbnet', 'manga-panel',
+  /// 'balloon-seg' or 'manga-panel-balloon'.
+  static String get activeDetectorKind {
+    var custom = TranslationSources.detector;
+    if (custom != null && custom.component.isInstalled) return custom.kind;
+    return 'dbnet';
+  }
+
   /// Model file paths for the worker isolate, containing only what is
   /// actually installed, plus the engines to try for [sourceLang].
   static WorkerModelPaths workerPaths([String sourceLang = 'auto']) {
@@ -206,12 +214,18 @@ abstract class TranslationModels {
     if (custom != null) {
       add(custom.engine, custom.component, custom.code, custom.inputHeight);
     }
-    var hasJa = ocrJa.isInstalled;
+    var jaComponent = TranslationSources.activeJaOcr;
+    var hasJa = jaComponent.isInstalled;
+    var detectorKind = activeDetectorKind;
     return WorkerModelPaths(
       detector: activeDetector.filePath('det.onnx'),
-      jaEncoder: hasJa ? ocrJa.filePath('encoder.onnx') : null,
-      jaDecoder: hasJa ? ocrJa.filePath('decoder.onnx') : null,
-      jaVocab: hasJa ? ocrJa.filePath('vocab.txt') : null,
+      detectorKind: detectorKind,
+      balloonModel: detectorKind == 'manga-panel-balloon'
+          ? activeDetector.filePath('balloon.onnx')
+          : null,
+      jaEncoder: hasJa ? jaComponent.filePath('encoder.onnx') : null,
+      jaDecoder: hasJa ? jaComponent.filePath('decoder.onnx') : null,
+      jaVocab: hasJa ? jaComponent.filePath('vocab.txt') : null,
       recModels: recModels,
       recDicts: recDicts,
       recHeights: recHeights,
@@ -231,7 +245,7 @@ abstract class TranslationModels {
     return [
       activeDetector,
       if (custom != null) custom.component,
-      if (sourceLang == 'ja') ocrJa,
+      if (sourceLang == 'ja') TranslationSources.activeJaOcr,
       if (sourceLang == 'zh-TW') ocrZhV5,
       if (sourceLang == 'zh') ocrZh.isInstalled ? ocrZh : ocrZhV5,
       if (sourceLang == 'en') ocrEn,
@@ -252,8 +266,9 @@ abstract class TranslationModels {
     if (!activeDetector.isInstalled) return false;
     return switch (sourceLang) {
       'auto' =>
-        ocrJa.isInstalled || _builtInRec.values.any((e) => e.$1.isInstalled),
-      'ja' => ocrJa.isInstalled,
+        TranslationSources.activeJaOcr.isInstalled ||
+            _builtInRec.values.any((e) => e.$1.isInstalled),
+      'ja' => TranslationSources.activeJaOcr.isInstalled,
       // v4 misreads Traditional text, so an explicit choice needs v5.
       'zh-TW' => ocrZhV5.isInstalled,
       'zh' => ocrZhV5.isInstalled || ocrZh.isInstalled,
@@ -301,7 +316,7 @@ String describeModelCheck(ModelCheckException e) {
     ModelCheckFailure.notRecognizer =>
       "This is not a text recognition model (PP-OCR rec).".tl,
     ModelCheckFailure.notDetector =>
-      "This is not a text detection model (PP-OCR det).".tl,
+      "This is not a compatible detection model (wrong output shape).".tl,
     ModelCheckFailure.dictionaryMismatch =>
       "The dictionary does not match the model: the model has @classes classes, the dictionary @entries lines."
           .tlParams({'classes': e.classes, 'entries': e.entries}),
@@ -510,6 +525,63 @@ class TranslationModelStore with ChangeNotifier {
 
   void cancelDownload(ModelComponent component) {
     _cancelTokens[component.id]?.cancel();
+  }
+
+  /// Imports user-supplied local model [files] into [component]'s directory,
+  /// verifies, and marks the component installed. The local import path for
+  /// models that are not published anywhere (manga-panel, balloon
+  /// segmentation, an alternative manga-ocr conversion).
+  Future<void> importFiles(
+    ModelComponent component,
+    List<(String name, String sourcePath)> files, {
+    Future<void> Function()? verify,
+  }) async {
+    var state = stateOf(component);
+    if (state.downloading || _deleting.contains(component.id)) return;
+    state
+      ..downloading = true
+      ..error = null
+      ..progress = 0
+      ..receivedBytes = 0
+      ..totalBytes = null;
+    notifyListeners();
+    try {
+      Directory(component.directory).createSync(recursive: true);
+      for (var (name, sourcePath) in files) {
+        var source = File(sourcePath);
+        if (!source.existsSync() || source.lengthSync() == 0) {
+          throw Exception('Missing model file: $sourcePath');
+        }
+        source.copySync(component.filePath(name));
+      }
+      if (verify != null) {
+        try {
+          await verify();
+        } catch (_) {
+          // Gone so a retry imports fresh files instead of re-checking bad
+          // ones.
+          await Directory(
+            component.directory,
+          ).deleteIgnoreError(recursive: true);
+          rethrow;
+        }
+      }
+      if (component.marker) {
+        File(
+          component.filePath(ModelComponent.markerName),
+        ).writeAsStringSync('');
+      }
+      state.progress = 1;
+    } catch (e) {
+      state.error = e is ModelCheckException
+          ? describeModelCheck(e)
+          : e.toString();
+      Log.error('Translation Models', 'Failed to import ${component.id}', e);
+    } finally {
+      state.downloading = false;
+      TranslationModels.invalidateReadyCache();
+      notifyListeners();
+    }
   }
 
   void _refreshKeepAlive() {

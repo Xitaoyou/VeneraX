@@ -654,7 +654,17 @@ class _DetectorEditor extends StatefulWidget {
 
 class _DetectorEditorState extends State<_DetectorEditor> {
   late final _url = TextEditingController(text: widget.existing?.url ?? '');
+  late String _kind = widget.existing?.kind ?? 'dbnet';
+  String? _panelFile;
+  String? _balloonFile;
   var _checking = false;
+
+  static const _kinds = <(String, String)>[
+    ('dbnet', 'PP-OCR (DBNet)'),
+    ('manga-panel', 'manga-panel (RT-DETR)'),
+    ('balloon-seg', 'Balloon segmentation (legacy)'),
+    ('manga-panel-balloon', 'manga-panel + balloon'),
+  ];
 
   @override
   void dispose() {
@@ -662,26 +672,121 @@ class _DetectorEditorState extends State<_DetectorEditor> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    var url = _url.text.trim();
-    if (!TranslationSources.isValidUrl(url)) {
-      context.showMessage(message: "Enter an http(s) link".tl);
+  Future<void> _submit() async {    if (_kind == 'dbnet') {
+      var url = _url.text.trim();
+      if (!TranslationSources.isValidUrl(url)) {
+        context.showMessage(message: "Enter an http(s) link".tl);
+        return;
+      }
+      setState(() => _checking = true);
+      var size = await TranslationModelStore.instance.probeSize(url);
+      if (!mounted) return;
+      var model = CustomDetectorModel(url: url, sizeBytes: size ?? 0);
+      TranslationSources.setDetector(model);
+      context.pop(model);
       return;
     }
+    // Local import: gather the files the selected backend needs.
+    var files = <(String, String)>[];
+    if (_kind == 'balloon-seg') {
+      if (_balloonFile == null) {
+        context.showMessage(message: "Choose the balloon model file".tl);
+        return;
+      }
+      files.add(('det.onnx', _balloonFile!));
+    } else {
+      if (_panelFile == null) {
+        context.showMessage(message: "Choose the manga-panel model file".tl);
+        return;
+      }
+      files.add(('det.onnx', _panelFile!));
+      if (_kind == 'manga-panel-balloon') {
+        if (_balloonFile == null) {
+          context.showMessage(message: "Choose the balloon model file".tl);
+          return;
+        }
+        files.add(('balloon.onnx', _balloonFile!));
+      }
+    }
     setState(() => _checking = true);
-    var size = await TranslationModelStore.instance.probeSize(url);
+    var model = CustomDetectorModel(url: '', kind: _kind);
+    await TranslationModelStore.instance.importFiles(
+      model.component,
+      files,
+      verify: () async {
+        // The panel model and the segmentation model have different
+        // contracts; check whichever files this kind carries.
+        if (_kind != 'balloon-seg') {
+          await checkDetectionModel(
+            model.component.filePath('det.onnx'),
+            kind: 'manga-panel',
+          );
+        }
+        if (_kind == 'balloon-seg' || _kind == 'manga-panel-balloon') {
+          await checkDetectionModel(
+            _kind == 'balloon-seg'
+                ? model.component.filePath('det.onnx')
+                : model.component.filePath('balloon.onnx'),
+            kind: 'balloon-seg',
+          );
+        }
+      },
+    );
     if (!mounted) return;
-    var model = CustomDetectorModel(url: url, sizeBytes: size ?? 0);
-    TranslationSources.setDetector(model);
-    context.pop(model);
+    if (model.component.isInstalled) {
+      TranslationSources.setDetector(model);
+      context.pop(model);
+    } else {
+      setState(() => _checking = false);
+      context.showMessage(
+        message: TranslationModelStore.instance
+                .stateOf(model.component)
+                .error ??
+            "Import failed".tl,
+      );
+    }
+  }
+
+  Widget _pickRow(String label, String? value) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            value != null
+                ? "$label · ${value.split(RegExp(r'[\\/]')).last}"
+                : label,
+            style: ts.s12,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton(
+          onPressed: () async {
+            var file = await selectFile(ext: ['onnx']);
+            if (file == null) return;
+            setState(() {
+              if (_kind == 'balloon-seg') {
+                _balloonFile = file.path;
+              } else if (label.startsWith('Balloon')) {
+                _balloonFile = file.path;
+              } else {
+                _panelFile = file.path;
+              }
+            });
+          },
+          child: Text("Choose file".tl),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    var isDbnet = _kind == 'dbnet';
     return ContentDialog(
       title: "Text detection model".tl,
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 460),
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
@@ -691,32 +796,66 @@ class _DetectorEditorState extends State<_DetectorEditor> {
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text("Fill in a tested model:".tl, style: ts.s12),
-                  for (var p in _detectorPresets)
-                    ActionChip(
-                      label: Text("${p.$1} · ${p.$3} MB"),
-                      onPressed: () =>
-                          setState(() => _url.text = '$_rapidOcrBase/${p.$2}'),
+                  for (var (kind, label) in _kinds)
+                    ChoiceChip(
+                      label: Text(label.tl),
+                      selected: _kind == kind,
+                      onSelected: (_) => setState(() => _kind = kind),
                     ),
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _url,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: "Detection model link (.onnx)".tl,
-                  border: const OutlineInputBorder(),
+              if (isDbnet) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text("Fill in a tested model:".tl, style: ts.s12),
+                    for (var p in _detectorPresets)
+                      ActionChip(
+                        label: Text("${p.$1} · ${p.$3} MB"),
+                        onPressed: () =>
+                            setState(() => _url.text = '$_rapidOcrBase/${p.$2}'),
+                      ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "Supported: PP-OCR text detection models (DBNet) in ONNX format. It replaces the built-in detector for every language. A larger detector finds small or stylized lettering more reliably but is slower on every page."
-                    .tl,
-                style: ts.s12.copyWith(color: context.colorScheme.outline),
-              ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _url,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: "Detection model link (.onnx)".tl,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Supported: PP-OCR text detection models (DBNet) in ONNX format. It replaces the built-in detector for every language. A larger detector finds small or stylized lettering more reliably but is slower on every page."
+                      .tl,
+                  style: ts.s12.copyWith(color: context.colorScheme.outline),
+                ),
+              ] else ...[
+                if (_kind != 'balloon-seg')
+                  _pickRow("manga-panel model".tl, _panelFile),
+                if (_kind == 'manga-panel-balloon')
+                  _pickRow("Balloon model".tl, _balloonFile),
+                if (_kind == 'balloon-seg')
+                  _pickRow("Balloon model".tl, _balloonFile),
+                const SizedBox(height: 12),
+                Text(
+                  _kind == 'balloon-seg'
+                      ? "Import the balloon segmentation model (ImageTrans 'balloonseg.onnx', fp16). Balloon interiors group text into blocks and text regions become OCR inputs."
+                          .tl
+                      : _kind == 'manga-panel-balloon'
+                      ? "Import both models: the RT-DETR detector finds text blocks and panels (reading order), the balloon segmentation model groups text into bubbles. Recommended for Japanese manga."
+                          .tl
+                      : "Import the manga-panel RT-DETR model (ImageTrans 'models/manga-panel/model.onnx'). It detects text blocks and panels directly; panels drive the reading order."
+                          .tl,
+                  style: ts.s12.copyWith(color: context.colorScheme.outline),
+                ),
+              ],
             ],
           ),
         ),
@@ -726,7 +865,7 @@ class _DetectorEditorState extends State<_DetectorEditor> {
         Button.filled(
           isLoading: _checking,
           onPressed: _submit,
-          child: Text("Save".tl),
+          child: Text(isDbnet ? "Save".tl : "Import".tl),
         ),
       ],
     );
