@@ -1966,7 +1966,13 @@
     "This is not a compatible detection model (wrong output shape).": "这不是兼容的检测模型（输出形状不对）。",
     "Import the balloon segmentation model (ImageTrans 'balloonseg.onnx', fp16). Balloon interiors group text into blocks and text regions become OCR inputs.": "导入气泡分割模型（ImageTrans 的 balloonseg.onnx，fp16）。气泡内部会把文字分组成块，文字区域作为 OCR 输入。",
     "Import both models: the RT-DETR detector finds text blocks and panels (reading order), the balloon segmentation model groups text into bubbles. Recommended for Japanese manga.": "导入两个模型：RT-DETR 检测器负责文字块和分镜（阅读顺序），气泡分割模型负责把文字按气泡分组。推荐日文漫画使用。",
-    "Import the manga-panel RT-DETR model (ImageTrans 'models/manga-panel/model.onnx'). It detects text blocks and panels directly; panels drive the reading order.": "导入 manga-panel RT-DETR 模型（ImageTrans 的 models/manga-panel/model.onnx）。它直接检测文字块和分镜；分镜决定阅读顺序。"
+    "Import the manga-panel RT-DETR model (ImageTrans 'models/manga-panel/model.onnx'). It detects text blocks and panels directly; panels drive the reading order.": "导入 manga-panel RT-DETR 模型（ImageTrans 的 models/manga-panel/model.onnx）。它直接检测文字块和分镜；分镜决定阅读顺序。",
+    "Detection model": "检测模型",
+    "Text blocks + panels": "文字块 + 分镜",
+    "Bubble masks": "气泡轮廓",
+    "Text blocks + panels + bubble grouping": "文字块 + 分镜 + 气泡分组",
+    "Text line boxes": "文字行框",
+    "Tap to switch to manga-panel or balloon detection": "点按切换到 manga-panel 或气泡检测"
   },
   "zh_TW": {
     "Adaptive reading mode": "自適應閱讀模式",
@@ -3935,6 +3941,12 @@
     "This is not a compatible detection model (wrong output shape).": "這不是相容的偵測模型（輸出形狀不對）。",
     "Import the balloon segmentation model (ImageTrans 'balloonseg.onnx', fp16). Balloon interiors group text into blocks and text regions become OCR inputs.": "匯入氣泡分割模型（ImageTrans 的 balloonseg.onnx，fp16）。氣泡內部會把文字分組成塊，文字區域作為 OCR 輸入。",
     "Import both models: the RT-DETR detector finds text blocks and panels (reading order), the balloon segmentation model groups text into bubbles. Recommended for Japanese manga.": "匯入兩個模型：RT-DETR 偵測器負責文字塊和分鏡（閱讀順序），氣泡分割模型負責把文字按氣泡分組。推薦日文漫畫使用。",
-    "Import the manga-panel RT-DETR model (ImageTrans 'models/manga-panel/model.onnx'). It detects text blocks and panels directly; panels drive the reading order.": "匯入 manga-panel RT-DETR 模型（ImageTrans 的 models/manga-panel/model.onnx）。它直接偵測文字塊和分鏡；分鏡決定閱讀順序。"
+    "Import the manga-panel RT-DETR model (ImageTrans 'models/manga-panel/model.onnx'). It detects text blocks and panels directly; panels drive the reading order.": "匯入 manga-panel RT-DETR 模型（ImageTrans 的 models/manga-panel/model.onnx）。它直接偵測文字塊和分鏡；分鏡決定閱讀順序。",
+    "Detection model": "偵測模型",
+    "Text blocks + panels": "文字塊 + 分鏡",
+    "Bubble masks": "氣泡輪廓",
+    "Text blocks + panels + bubble grouping": "文字塊 + 分鏡 + 氣泡分組",
+    "Text line boxes": "文字行框",
+    "Tap to switch to manga-panel or balloon detection": "點按切換到 manga-panel 或氣泡偵測"
   }
 }

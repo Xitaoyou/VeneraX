@@ -79,6 +79,7 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
             ),
           ).toSliver(),
           _buildSectionHeader(context, "Text detection".tl).toSliver(),
+          _buildActiveDetectorRow(context).toSliver(),
           for (var component in TranslationModels.all)
             if (component.id == 'text_detector')
               _buildComponent(context, component, requiredIds).toSliver(),
@@ -185,6 +186,42 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
       TranslationSources.setJaOcr(model);
     }
     if (mounted) setState(() {});
+  }
+
+  /// The detector actually in use — the built-in DBNet or one of the
+  /// ImageTrans object-detection/segmentation backends — with the editor one
+  /// tap away. Lives here because this page is where users look for model
+  /// choices.
+  Widget _buildActiveDetectorRow(BuildContext context) {
+    var custom = TranslationSources.detector;
+    var active = custom != null && custom.component.isInstalled;
+    var (kindLabel, hint) = switch (TranslationModels.activeDetectorKind) {
+      'manga-panel' => ("manga-panel (RT-DETR)".tl, "Text blocks + panels".tl),
+      'balloon-seg' => ("Balloon segmentation (legacy)".tl, "Bubble masks".tl),
+      'manga-panel-balloon' => (
+        "manga-panel + balloon".tl,
+        "Text blocks + panels + bubble grouping".tl,
+      ),
+      _ => ("Built-in (PP-OCRv4 mobile)".tl, "Text line boxes".tl),
+    };
+    return ListTile(
+      title: Text("Detection model".tl),
+      subtitle: Text(
+        active
+            ? "$kindLabel\n$hint"
+            : "$kindLabel\n${"Tap to switch to manga-panel or balloon detection".tl}",
+      ),
+      isThreeLine: true,
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        var saved = await showDialog<CustomDetectorModel>(
+          context: App.rootContext,
+          builder: (context) =>
+              _DetectorEditor(existing: TranslationSources.detector),
+        );
+        if (saved != null && mounted) setState(() {});
+      },
+    );
   }
 
   Widget _buildComponent(
