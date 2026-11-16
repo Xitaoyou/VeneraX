@@ -115,11 +115,13 @@ List<PanelDetection> runMangaPanelDetector(
     var base = i * step;
     var score = data[base + 4];
     if (score < confThreshold) continue;
-    // Rows are [x1,y1,x2,y2,conf,class] in 640-canvas pixels.
-    var x1 = (data[base] / sx).round().clamp(0, image.width);
-    var y1 = (data[base + 1] / sy).round().clamp(0, image.height);
-    var x2 = (data[base + 2] / sx).round().clamp(0, image.width);
-    var y2 = (data[base + 3] / sy).round().clamp(0, image.height);
+    // Rows are [x1,y1,x2,y2,conf,class] in 640-canvas pixels; the canvas is
+    // a plain resize of the page, so canvas -> original MULTIPLIES by the
+    // page/canvas ratio.
+    var x1 = (data[base] * sx).round().clamp(0, image.width);
+    var y1 = (data[base + 1] * sy).round().clamp(0, image.height);
+    var x2 = (data[base + 2] * sx).round().clamp(0, image.width);
+    var y2 = (data[base + 3] * sy).round().clamp(0, image.height);
     if (x2 - x1 < 4 || y2 - y1 < 4) continue;
     detections.add(
       PanelDetection(IntRect(x1, y1, x2, y2), score, data[base + 5].round()),
@@ -146,28 +148,56 @@ BalloonSegBoxes runBalloonSegmenter(
   var padTop = (canvasH - nh) ~/ 2;
 
   // Grayscale (Rec.601), aspect-fit, white padding, ImageTrans normalization.
+  // ImageTrans downscales with INTER_AREA (the javap shows interpolation
+  // switches to 3 for scale < 1): an area-weighted average over the source
+  // footprint. Plain point-sampled bilinear aliases on the downscale and
+  // the masks come out fragmented, so replicate the area average.
   var gray = Float32List(canvasW * canvasH);
   gray.fillRange(0, gray.length, (1.0 - 0.449) / 0.226); // white padding
   var pixels = image.pixels;
+  double lum(int y, int x) {
+    var i = (y * image.width + x) * 4;
+    return 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+  }
+
+  // Area-average the source luminance into the nw x nh window.
   for (var y = 0; y < nh; y++) {
-    var fy = ((y + 0.5) / scale - 0.5).floor().clamp(0, image.height - 1);
+    var sy0 = y * image.height / nh;
+    var sy1 = (y + 1) * image.height / nh;
+    var y0 = sy0.floor();
+    var y1 = math.min(image.height, (sy1).ceil());
     var dstRow = (y + padTop) * canvasW + padLeft;
-    var srcRow = fy * image.width;
     for (var x = 0; x < nw; x++) {
-      var fx = ((x + 0.5) / scale - 0.5).floor().clamp(0, image.width - 1);
-      var si = (srcRow + fx) * 4;
-      var lum =
-          0.299 * pixels[si] + 0.587 * pixels[si + 1] + 0.114 * pixels[si + 2];
-      gray[dstRow + x] = (lum / 255.0 - 0.449) / 0.226;
+      var sx0 = x * image.width / nw;
+      var sx1 = (x + 1) * image.width / nw;
+      var x0 = sx0.floor();
+      var x1 = math.min(image.width, sx1.ceil());
+      var sum = 0.0;
+      var weight = 0.0;
+      for (var yy = y0; yy < y1; yy++) {
+        var wy = math.min(sy1, yy + 1.0) - math.max(sy0, yy.toDouble());
+        for (var xx = x0; xx < x1; xx++) {
+          var wx = math.min(sx1, xx + 1.0) - math.max(sx0, xx.toDouble());
+          sum += lum(yy, xx) * wy * wx;
+          weight += wy * wx;
+        }
+      }
+      var value = weight > 0 ? sum / weight : lum(y0, x0);
+      gray[dstRow + x] = (value / 255.0 - 0.449) / 0.226;
     }
   }
   var input = session
-      .run({
-        session.inputNames.first: OrtInput.float16(
-          floatToHalfList(gray),
-          const [1, canvasH, canvasW, 1],
-        ),
-      })
+      .run(
+        {
+          session.inputNames.first: OrtInput.float16(
+            floatToHalfList(gray),
+            const [1, canvasH, canvasW, 1],
+          ),
+        },
+        // The graph's output is FLOAT16; without this the raw half-float bits
+        // are reinterpreted as fp32 and every mask decodes to noise.
+        fp16Outputs: true,
+      )
       .values
       .first;
   if (input.shape.length != 4 || input.shape[3] != 3) {

@@ -145,6 +145,7 @@ flutter:
     - assets/translation_models/mangaocr/vocab.txt
     - assets/translation_models/manga-panel/model.onnx
     - assets/translation_models/balloonseg/model.onnx
+    - assets/translation_models/test_page.png
     - assets/opencc.txt
     - assets/new_logo.png
     - assets/new_logo2.png

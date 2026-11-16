@@ -724,12 +724,24 @@ class _WorkerState {
     return blocks;
   }
 
-  /// Median height of a cluster's line boxes — an estimate of the original
-  /// glyph height, used to size the translation to the source text.
+  /// Median glyph size of a cluster's boxes — an estimate of the original
+  /// lettering size, so the renderer can size the translation to match the
+  /// source text. For DBNet these are text lines, so the line height is the
+  /// glyph size. The object-detection backends produce block-level boxes
+  /// (whole columns / whole bubbles), where the line height is the block
+  /// height and would not cap anything: for vertical blocks the glyph size
+  /// is the box WIDTH (one column ≈ one glyph wide), for horizontal blocks
+  /// the box height.
   int _medianLineHeight(List<IntRect> lines) {
     if (lines.isEmpty) return 0;
-    var heights = [for (var l in lines) l.height]..sort();
-    return heights[heights.length ~/ 2];
+    var vertical = lines
+        .where((l) => l.height > l.width * 1.3)
+        .length;
+    var useWidth = vertical > lines.length / 2;
+    var sizes = [
+      for (var l in lines) useWidth ? l.width : l.height,
+    ]..sort();
+    return sizes[sizes.length ~/ 2];
   }
 
   /// OCR one block. In 'auto' mode a vertical block prefers the Japanese
