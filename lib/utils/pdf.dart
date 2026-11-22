@@ -6,7 +6,6 @@ import 'package:venera/foundation/app.dart';
 import 'package:venera/foundation/local.dart';
 import 'package:venera/utils/image.dart';
 import 'package:venera/utils/io.dart';
-import 'package:zip_flutter/zip_flutter.dart';
 
 typedef DecodeImage = Future<Image> Function(Uint8List data);
 
@@ -454,7 +453,8 @@ class PdfGenerator {
       data[i * 3 + 1] = pixel.g;
       data[i * 3 + 2] = pixel.b;
     }
-    data = tdeflCompressData(data, true, true, 9);
+    // PDF image streams use the standard zlib wrapper (FlateDecode).
+    data = Uint8List.fromList(ZLibEncoder(level: 9).convert(data));
     return (width: width, height: height, data: data);
   }
 }

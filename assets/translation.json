@@ -1,5 +1,8 @@
 {
   "zh_CN": {
+    "Export as zip": "导出为 ZIP",
+    "Share exported file": "分享导出文件",
+    "Save or send files with the system share sheet": "通过系统分享面板保存或发送文件",
     "Adaptive reading mode": "自适应阅读模式",
     "Paged comic reading mode": "页漫阅读模式",
     "Detect page layout from several body images. Strips scroll vertically; uncertain layouts keep the selected mode. Selecting a mode manually turns this off.": "根据多张正文图片识别版式。条漫上下连续阅读，无法确定时沿用所选模式；手动选择阅读模式会关闭自适应。",
@@ -1979,6 +1982,9 @@
     "Using the bundled model": "正在使用内置模型"
   },
   "zh_TW": {
+    "Export as zip": "匯出為 ZIP",
+    "Share exported file": "分享匯出檔案",
+    "Save or send files with the system share sheet": "透過系統分享面板儲存或傳送檔案",
     "Adaptive reading mode": "自適應閱讀模式",
     "Paged comic reading mode": "頁漫閱讀模式",
     "Detect page layout from several body images. Strips scroll vertically; uncertain layouts keep the selected mode. Selecting a mode manually turns this off.": "根據多張正文圖片識別版式。條漫上下連續閱讀，無法確定時沿用所選模式；手動選擇閱讀模式會關閉自適應。",

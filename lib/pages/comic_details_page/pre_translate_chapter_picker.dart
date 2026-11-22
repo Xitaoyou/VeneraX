@@ -771,7 +771,16 @@ class _SelectPreTranslateChapterState extends State<_SelectPreTranslateChapter>
       context.showMessage(message: "No stored pages".tl);
       return;
     }
-    context.to(() => TranslatedChapterReaderPage(chapter: chapter));
+    context.to(
+      () => ComicPage(
+        id: widget.cid,
+        sourceKey: widget.sourceKey,
+        title: widget.title,
+        cover: widget.cover,
+        resumeOnOpen: true,
+        readChapterId: chapter.identity.chapterId,
+      ),
+    );
   }
 
   Future<void> _exportChapter(int i) async {

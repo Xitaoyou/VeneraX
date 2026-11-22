@@ -151,3 +151,26 @@ it never substitutes another version. Same-version rebuilds are labeled as such.
 Fork features in `release-notes.md` are cumulative, explicitly not all newly added.
 The generated body is published on GitHub, attached as `release-notes.md`, included
 in each SideStore version description, and displayed by the in-app update dialog.
+
+## iOS comic export and translated-library resume
+
+ZIP is a separate persisted export format using the CBZ page/metadata layout
+and a streaming Dart ZIP writer. PDF image streams use standard zlib compression.
+iOS exports stage to the app cache and await the system share result; they never
+request a writable folder path. The task retains output until delivery completes,
+handles dismissal/failure without counting it saved, and persists sharing mode.
+Existing directory and system-save modes on other platforms remain supported.
+The share popover has a nonzero anchor for iPad; same-title output names use a
+streamed named copy when necessary, retained until the share action finishes.
+
+Translated-library read actions open ComicPage(resumeOnOpen: true); the page waits
+for data and its opening transition before calling the existing continueRead/read
+methods. They construct the same ImageSurfaceRoute and Reader as manual reading.
+The detail route stays beneath the reader. The initial callback runs only once,
+checks that its route is current and removes animation listeners on disposal.
+Explicit translated chapter ids are resolved in grouped and ungrouped chapters.
+
+fork_export_share_test.dart verifies real ZIP/PDF/EPUB output, PDF Flate streams,
+sharing lifetime, unique names, persistence, failure and dismissal.
+fork_translated_resume_test.dart exercises actual library menus, detail/reader
+routes and downward dismissal in both horizontal reading directions.

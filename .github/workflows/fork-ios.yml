@@ -98,6 +98,12 @@ jobs:
       - name: Analyze changed integration points
         run: >-
           flutter analyze --no-pub
+          lib/foundation/export_tasks.dart
+          lib/utils/io.dart
+          lib/utils/cbz.dart
+          lib/utils/pdf.dart
+          lib/pages/local_comics_page.dart
+          lib/pages/translated_comics_page.dart
           lib/foundation/image_surface_route.dart
           lib/components/pull_down_to_dismiss.dart
           lib/components/swipe_action.dart
@@ -122,6 +128,10 @@ jobs:
           test/fork_release_notes_test.dart
           test/app_update_changelog_test.dart
           test/app_update_dialog_test.dart
+          test/fork_export_share_test.dart
+          test/fork_translated_resume_test.dart
+          test/export_task_test.dart
+          test/pdf_export_failure_test.dart
       - name: Verify update feed metadata
         run: python3 .github/fork/test_feed.py
       - name: Build unsigned iOS app

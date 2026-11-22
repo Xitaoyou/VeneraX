@@ -584,6 +584,7 @@ class _LocalComicsPageState extends State<LocalComicsPage>
       case ExportPhase.packaging:
         return "Packaging".tl;
       case ExportPhase.writing:
+        if (task.shareOutput) return "Share exported file".tl;
         if (task.saveWithDialog) return "Save exported file".tl;
         var pct = task.writeProgress;
         if (pct != null) {
@@ -649,7 +650,7 @@ class _LocalComicsPageState extends State<LocalComicsPage>
       context.showMessage(message: "An export task is already running".tl);
       return;
     }
-    var folder = App.isOhos ? '' : await _pickExportFolder();
+    var folder = (App.isIOS || App.isOhos) ? '' : await _pickExportFolder();
     if (folder == null || !mounted) return;
     var task = manager.startExport(
       folderPath: folder,
@@ -657,6 +658,7 @@ class _LocalComicsPageState extends State<LocalComicsPage>
       comics: comics,
       merged: merged,
       saveWithDialog: App.isOhos,
+      shareOutput: App.isIOS,
     );
     if (task == null) return;
     var controller = showLoadingDialog(
@@ -783,6 +785,12 @@ class _LocalComicsPageState extends State<LocalComicsPage>
 
   List<MenuEntry> exportActions(List<LocalComic> comics) {
     return [
+      MenuEntry(
+        group: MenuGroup.export,
+        icon: Icons.folder_zip_outlined,
+        text: "Export as zip".tl,
+        onClick: () => _startExportTask(comics, ExportFormat.zip),
+      ),
       MenuEntry(
         group: MenuGroup.export,
         icon: Icons.outbox_outlined,

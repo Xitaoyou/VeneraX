@@ -88,7 +88,9 @@ getTaskTitle('export', {}),
       ExportPhase.preparing => "Preparing".tl,
       ExportPhase.processing => task.currentTitle ?? "Exporting".tl,
       ExportPhase.packaging => "Packaging".tl,
-      ExportPhase.writing => task.saveWithDialog
+      ExportPhase.writing => task.shareOutput
+          ? "Share exported file".tl
+          : task.saveWithDialog
           ? "Save exported file".tl
           : task.writeProgress != null
           ? "Writing to folder @p%".tlParams({
@@ -120,7 +122,9 @@ getTaskTitle('export', {}),
         ),
         const SizedBox(height: 2),
         Text(
-          task.saveWithDialog
+          task.shareOutput
+              ? "Save or send files with the system share sheet".tl
+              : task.saveWithDialog
               ? "Choose where to save each exported file".tl
               : "Folder: @folder".tlParams({'folder': task.folderPath}),
           style: ts.s14,

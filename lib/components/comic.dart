@@ -301,7 +301,7 @@ class ComicTile extends StatelessWidget {
               if (local != null) {
                 local.read();
               } else {
-                navigatorContext.to(
+                navigatorContext.toImageSurface(
                   () => ReaderWithLoading(
                     id: comic.id,
                     sourceKey: comic.sourceKey,

@@ -23,6 +23,7 @@ enum ExportTaskStatus { running, paused, completed, canceled, failed }
 /// of this format directly into the user-chosen folder.
 enum ExportFormat {
   cbz('.cbz'),
+  zip('.zip'),
   pdf('.pdf'),
   epub('.epub'),
   veneraComics('.venera_comics');
@@ -34,6 +35,7 @@ enum ExportFormat {
   /// Untranslated label shown on the Tasks page (the UI localizes it).
   String get label => switch (this) {
         ExportFormat.cbz => 'CBZ',
+        ExportFormat.zip => 'ZIP',
         ExportFormat.pdf => 'PDF',
         ExportFormat.epub => 'EPUB',
         ExportFormat.veneraComics => 'venera_comics',
@@ -92,6 +94,7 @@ class ExportTask {
     Set<String>? doneKeys,
     this.merged = false,
     this.saveWithDialog = false,
+    this.shareOutput = false,
     this.failedCount = 0,
     this.status = ExportTaskStatus.running,
     this.currentTitle,
@@ -113,6 +116,9 @@ class ExportTask {
 
   /// Save each output through the system picker instead of a directory path.
   final bool saveWithDialog;
+
+  /// Keep generated files alive until the system share sheet completes.
+  final bool shareOutput;
 
   /// Keys ([ExportComicRef.key]) of comics already written (or skipped).
   final Set<String> doneKeys;
@@ -155,6 +161,7 @@ class ExportTask {
         'doneKeys': doneKeys.toList(),
         'merged': merged,
         'saveWithDialog': saveWithDialog,
+        'shareOutput': shareOutput,
         'failedCount': failedCount,
         // Persist active tasks as paused so they are not auto-run on restart.
         'status': isActive ? ExportTaskStatus.paused.name : status.name,
@@ -175,6 +182,7 @@ class ExportTask {
         doneKeys: (json['doneKeys'] as List? ?? []).map((e) => '$e').toSet(),
         merged: json['merged'] ?? false,
         saveWithDialog: json['saveWithDialog'] ?? false,
+        shareOutput: json['shareOutput'] ?? false,
         failedCount: json['failedCount'] ?? 0,
         status: ExportTaskStatus.values.firstWhere(
           (e) => e.name == json['status'],
@@ -213,6 +221,7 @@ class ExportTaskManager with ChangeNotifier {
     required List<LocalComic> comics,
     bool merged = false,
     bool saveWithDialog = false,
+    bool shareOutput = false,
   }) {
     if (currentTasks.any((t) => t.isActive)) {
       return null;
@@ -230,7 +239,8 @@ class ExportTaskManager with ChangeNotifier {
           .toList(),
       createdAt: DateTime.now(),
       merged: merged && format == ExportFormat.veneraComics,
-      saveWithDialog: saveWithDialog,
+      saveWithDialog: saveWithDialog || shareOutput,
+      shareOutput: shareOutput,
     );
     currentTasks.insert(0, task);
     _persist();
@@ -394,7 +404,7 @@ class ExportTaskManager with ChangeNotifier {
             task.writeProgress = task.saveWithDialog ? null : 0;
             notifyListeners();
             if (task.saveWithDialog) {
-              if (!await saveFile(filename: outName, file: produced)) {
+              if (!await _deliverOutput(task, produced, outName)) {
                 task.status = ExportTaskStatus.canceled;
                 await produced.deleteIgnoreError();
                 break;
@@ -650,10 +660,7 @@ class ExportTaskManager with ChangeNotifier {
         task.phase = ExportPhase.writing;
         task.writeProgress = null;
         notifyListeners();
-        if (await saveFile(
-          filename: _mergedFileName(task.createdAt),
-          file: produced,
-        )) {
+        if (await _deliverOutput(task, produced, _mergedFileName(task.createdAt))) {
           task.doneKeys.addAll(allKeys);
         } else {
           task.status = ExportTaskStatus.canceled;
@@ -726,6 +733,12 @@ class ExportTaskManager with ChangeNotifier {
   /// Builds one comic into [cacheDir] using the existing per-format exporters
   /// (which already run their heavy work off the UI thread / in isolates) and
   /// returns the produced file. The caller copies it into the target folder.
+  Future<bool> _deliverOutput(ExportTask task, File file, String filename) {
+    return task.shareOutput
+        ? shareFileForExport(file: file, filename: filename)
+        : saveFile(file: file, filename: filename);
+  }
+
   Future<File> _buildToCache(
     LocalComic comic,
     ExportFormat format,
@@ -736,6 +749,8 @@ class ExportTaskManager with ChangeNotifier {
     switch (format) {
       case ExportFormat.cbz:
         return CBZ.export(comic, outPath);
+      case ExportFormat.zip:
+        return CBZ.export(comic, outPath, portableZip: true);
       case ExportFormat.pdf:
         return createPdfFromComicIsolate(comic, outPath);
       case ExportFormat.epub:

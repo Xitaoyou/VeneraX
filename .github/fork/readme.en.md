@@ -6,6 +6,8 @@
 
 | Area | Behavior and compatibility |
 | --- | --- |
+| Comic export | Adds ZIP export. Local comic exports on iOS use the system share sheet for Save to Files, AirDrop and other apps; cancellation and failure are not counted as saved. |
+| Translation-library resume | Opens the matching comic detail page beneath the standard reader; downward dismissal returns to that detail page, preserving reading-mode and gesture policies. |
 | Pull down to dismiss the reader | Enabled on iOS for horizontal gallery and continuous reading, in both LTR and RTL directions. Vertical reading disables it silently. |
 | Pull down to dismiss previews | Supported in fullscreen cover and favorite-image previews. |
 | Dismissal animation | Reader images and toolbar shrink/fade as one page over a stationary background. Previews return to a visible matching thumbnail when available, otherwise collapse as a page. Canceled gestures rebound; reduced motion is respected. |

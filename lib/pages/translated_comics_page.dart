@@ -56,7 +56,7 @@ Future<void> hydrateTranslatedComicMetadata() async {
       LocalComic? local;
       if (LocalManager().isInitialized) {
         local = LocalManager().find(
-          item.sourceKey,
+          item.comicId,
           ComicType.fromKey(item.sourceKey),
         );
       }
@@ -361,6 +361,21 @@ class _TranslatedComicsPageState extends State<TranslatedComicsPage>
                       entry.sourceKey == comic.sourceKey,
                 );
                 return [
+                  MenuEntry(
+                    action: MenuAction.read,
+                    role: MenuEntryRole.primary,
+                    icon: Icons.menu_book_outlined,
+                    text: 'Continue reading'.tl,
+                    onClick: () => context.to(
+                      () => ComicPage(
+                        id: item.comicId,
+                        sourceKey: item.sourceKey,
+                        title: item.title,
+                        cover: item.cover,
+                        resumeOnOpen: true,
+                      ),
+                    ),
+                  ),
                   MenuEntry(
                     icon: Icons.info_outline_rounded,
                     text: 'Open comic details'.tl,

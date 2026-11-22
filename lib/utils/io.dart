@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import 'package:flutter_saf/flutter_saf.dart';
 import 'package:venera/foundation/app.dart';
@@ -452,7 +453,9 @@ class StoragePermission {
       // throwing. A probe that only writes+deletes would be fooled by that and
       // report the folder writable while real downloads land nowhere. Verifying
       // the bytes actually persisted catches both the throw and the no-op case.
-      var readBack = probe.existsSync() ? probe.readAsBytesSync() : const <int>[];
+      var readBack = probe.existsSync()
+          ? probe.readAsBytesSync()
+          : const <int>[];
       probe.deleteSync();
       return readBack.length == marker.length;
     } catch (_) {
@@ -567,6 +570,50 @@ Future<String?> selectDirectory() async {
 // selectDirectoryIOS
 Future<String?> selectDirectoryIOS() async {
   return IOSDirectoryPicker.selectDirectory();
+}
+
+/// Share a fully written export by path, without reading a large book into RAM.
+/// The caller owns cleanup and must await this future before deleting [file].
+Future<bool> shareFileForExport({
+  required File file,
+  required String filename,
+}) async {
+  IO._selectingFiles++;
+  Directory? namedCopy;
+  try {
+    if (!await file.exists()) {
+      throw FileSystemException('Export file is missing', file.path);
+    }
+    // Existing-path shares use the actual basename on iOS. Preserve unique
+    // names for two exported comics with the same title without reading them
+    // into memory or renaming the task's source out from under its cleanup.
+    if (file.name != filename) {
+      namedCopy = await Directory(FilePath.join(App.cachePath,
+          'export_share_${DateTime.now().microsecondsSinceEpoch}')).create(recursive: true);
+      final copy = File(FilePath.join(namedCopy.path, filename));
+      await copyFileStreaming(file, copy);
+      file = copy;
+    }
+    final render = App.rootContext.findRenderObject();
+    final bounds = render is RenderBox && render.hasSize
+        ? render.localToGlobal(Offset.zero) & render.size
+        : const Rect.fromLTWH(0, 0, 1, 1);
+    final result = await s.SharePlus.instance.share(
+      s.ShareParams(
+        files: [s.XFile(file.path)],
+        fileNameOverrides: [filename],
+        sharePositionOrigin: Rect.fromCenter(
+          center: bounds.center,
+          width: 1,
+          height: 1,
+        ),
+      ),
+    );
+    return result.status != s.ShareResultStatus.dismissed;
+  } finally {
+    await namedCopy?.deleteIgnoreError(recursive: true);
+    IO._selectingFiles--;
+  }
 }
 
 Future<bool> saveFile({

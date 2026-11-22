@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:archive/archive_io.dart' show ZipFileEncoder;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_7zip/flutter_7zip.dart';
 import 'package:venera/foundation/app.dart';
@@ -357,7 +358,7 @@ abstract class CBZ {
     }
   }
 
-  static Future<File> export(LocalComic comic, String outFilePath) async {
+  static Future<File> export(LocalComic comic, String outFilePath, {bool portableZip = false}) async {
     // Unique per-call staging dir + guaranteed cleanup: the old fixed
     // 'cbz_export' dir was left behind whenever an export threw mid-way
     // (large libraries copy every image, so a disk-full/IO error is real),
@@ -441,7 +442,17 @@ abstract class CBZ {
       ).writeAsString(_buildComicInfoXml(metaData));
       var cbz = File(outFilePath);
       if (cbz.existsSync()) cbz.deleteSync();
-      await _compress(cache.path, cbz.path);
+      if (portableZip) {
+        final encoder = ZipFileEncoder();
+        encoder.create(cbz.path, level: ZipFileEncoder.store);
+        try {
+          await encoder.addDirectory(cache, includeDirName: false, followLinks: false);
+        } finally {
+          await encoder.close();
+        }
+      } else {
+        await _compress(cache.path, cbz.path);
+      }
       return cbz;
     } finally {
       cache.deleteIgnoreError(recursive: true);

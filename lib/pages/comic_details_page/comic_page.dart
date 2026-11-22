@@ -122,6 +122,8 @@ class ComicPage extends StatefulWidget {
     this.cover,
     this.title,
     this.heroID,
+    this.resumeOnOpen = false,
+    this.readChapterId,
   });
 
   final String id;
@@ -134,6 +136,9 @@ class ComicPage extends StatefulWidget {
 
   final Object? heroID;
 
+  final bool resumeOnOpen;
+  final String? readChapterId;
+
   @override
   State<ComicPage> createState() => _ComicPageState();
 }
@@ -144,6 +149,67 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
   History? history;
 
   bool showAppbarTitle = false;
+  bool _didAutoResume = false;
+  Animation<double>? _resumeAnimation;
+  AnimationStatusListener? _resumeStatusListener;
+
+  void _clearAutoResumeListener() {
+    final listener = _resumeStatusListener;
+    if (listener != null) _resumeAnimation?.removeStatusListener(listener);
+    _resumeAnimation = null;
+    _resumeStatusListener = null;
+  }
+
+  void _resumeAfterOpening() {
+    if (!mounted) return;
+    final route = ModalRoute.of(context);
+    void start() {
+      _clearAutoResumeListener();
+      if (!mounted || route?.isCurrent != true) return;
+      final id = widget.readChapterId;
+      final chapters = comic.chapters;
+      if (id != null && chapters == null) {
+        read(1, 1);
+        return;
+      }
+      if (id != null && chapters != null) {
+        if (!chapters.isGrouped) {
+          final index = chapters.allChapters.keys.toList().indexOf(id);
+          if (index >= 0) {
+            read(index + 1, 1);
+            return;
+          }
+        } else {
+          for (var group = 0; group < chapters.groupCount; group++) {
+            final index = chapters
+                .getGroupByIndex(group)
+                .keys
+                .toList()
+                .indexOf(id);
+            if (index >= 0) {
+              read(index + 1, 1, group + 1);
+              return;
+            }
+          }
+        }
+        context.showMessage(message: 'Chapter not found'.tl);
+        return;
+      }
+      continueRead();
+    }
+
+    final animation = route?.animation;
+    if (animation == null || animation.status == AnimationStatus.completed) {
+      start();
+    } else {
+      _resumeAnimation = animation;
+      _resumeStatusListener = (status) {
+        if (status == AnimationStatus.completed) start();
+        if (status == AnimationStatus.dismissed) _clearAutoResumeListener();
+      };
+      animation.addStatusListener(_resumeStatusListener!);
+    }
+  }
 
   var scrollController = ScrollController();
 
@@ -316,6 +382,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
 
   @override
   void dispose() {
+    _clearAutoResumeListener();
     scrollController.removeListener(onScroll);
     HistoryManager().removeListener(_onHistoryChanged);
     ComicCollectionStore.changes.removeListener(_onCollectionChanged);
@@ -853,6 +920,12 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
     if (comic.chapters == null) {
       isDownloaded = LocalManager().isDownloaded(comic.id, comic.comicType, 0);
     }
+    if (widget.resumeOnOpen && !_didAutoResume) {
+      _didAutoResume = true;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _resumeAfterOpening(),
+      );
+    }
   }
 
   Iterable<Widget> buildTitle(double horizontalInset) sync* {
@@ -1000,7 +1073,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         tag: "cover${widget.heroID}",
         transitionOnUserGestures: true,
         createRectTween: imageSurfaceRectTween,
-                flightShuttleBuilder: imageSurfaceHeroFlight,
+        flightShuttleBuilder: imageSurfaceHeroFlight,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: SizedBox(width: width, height: width / 0.72, child: cover),
