@@ -32,6 +32,14 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
+  # CI supplies checksum-verified ORT 1.23.0 locally while its download host
+  # has an invalid TLS certificate. Normal developer builds keep their defaults.
+  onnx_pods = File.join(__dir__, 'Flutter', 'ephemeral', 'fork_onnx')
+  if File.exist?(File.join(onnx_pods, 'onnxruntime-c', 'onnxruntime-c.podspec.json'))
+    pod 'onnxruntime-c', :path => File.join(onnx_pods, 'onnxruntime-c')
+    pod 'onnxruntime-objc', :path => File.join(onnx_pods, 'onnxruntime-objc')
+  end
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   #target 'RunnerTests' do
   #  inherit! :search_paths

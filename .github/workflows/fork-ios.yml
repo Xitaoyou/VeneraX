@@ -138,6 +138,8 @@ jobs:
           test/pdf_export_failure_test.dart
       - name: Verify update feed metadata
         run: python3 .github/fork/test_feed.py
+      - name: Prepare verified ONNX native dependencies
+        run: python3 .github/fork/prepare_onnx_pods.py
       - name: Build unsigned iOS app
         env:
           FORK_BUILD: ${{ github.run_number }}
