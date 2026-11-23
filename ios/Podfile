@@ -29,8 +29,8 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # ONNX ships static binaries; its Flutter wrapper must use static linkage too.
-  use_frameworks! :linkage => :static
+  # FFI plugins such as rhttp load their frameworks with dlopen at runtime.
+  use_frameworks!
   use_modular_headers!
 
   # CI supplies checksum-verified ORT 1.23.0 locally while its download host
@@ -45,6 +45,16 @@ target 'Runner' do
   #target 'RunnerTests' do
   #  inherit! :search_paths
   #end
+end
+
+# Only the ONNX dependency chain contains static binaries. Keeping every other
+# plugin dynamic is required by their Dart FFI loaders (not just by the linker).
+pre_install do |installer|
+  installer.pod_targets.each do |target|
+    if ['onnxruntime-c', 'onnxruntime-objc', 'flutter_onnxruntime'].include?(target.pod_name)
+      target.define_singleton_method(:build_type) { Pod::BuildType.static_framework }
+    end
+  end
 end
 
 post_install do |installer|

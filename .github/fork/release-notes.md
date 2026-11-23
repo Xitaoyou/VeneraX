@@ -27,3 +27,8 @@ IPA 未签名，需使用自己的签名工具安装。iOS 应用内更新打开
 
 AltStore / SideStore 更新源：
 https://github.com/Xitaoyou/VeneraX/releases/latest/download/altstore-source.json
+
+### iOS 网络库修复
+
+- ONNX 依赖链单独静态链接，rhttp 等 FFI 插件保留动态 framework，修复更新后漫画源无法连接的问题。
+- 发布前检查 rhttp 动态库及 Rust 接口符号，缺失时停止发布，避免只编译成功却无法联网。

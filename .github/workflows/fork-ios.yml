@@ -34,6 +34,7 @@ jobs:
           python3 .github/fork/test_should_build.py
           python3 .github/fork/test_sync_upstream.py
           python3 .github/fork/test_release_notes.py
+          python3 .github/fork/test_ios_runtime.py
       - id: source
         shell: bash
         env:
@@ -152,6 +153,7 @@ jobs:
           echo "BUILD=$build" >> "$GITHUB_ENV"
           echo "TAG=v$version+$build" >> "$GITHUB_ENV"
           flutter build ios --release --no-codesign --build-name="$version" --build-number="$build"
+          python3 .github/fork/verify_ios_runtime.py build/ios/iphoneos/Runner.app
           mkdir -p result/Payload
           cp -R build/ios/iphoneos/Runner.app result/Payload/
           cd result
