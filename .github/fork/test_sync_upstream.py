@@ -24,7 +24,7 @@ class SyncTest(unittest.TestCase):
         self.assertIn('Personal iOS Fork', rendered)
         self.assertIn('Fork section\n\nNew upstream guide', rendered)
 
-    def exercise_merge(self, code_conflict=False):
+    def exercise_merge(self, code_conflict=False, deleted_workflow=False):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
 
@@ -51,12 +51,15 @@ class SyncTest(unittest.TestCase):
             write('assets/translation.json', json.dumps({'zh': {'base': 'old'}}))
             write('.github/workflows/ci.yml', 'original')
             write('lib/main.dart', 'base')
+            write('.github/scripts/removed.mjs', 'base script')
             base = commit('base')
             write('README.md', '<div><h1>VeneraX</h1></div>\nUpstream guide')
             write('README_EN.md', '<div><h1>VeneraX</h1></div>\nUpstream guide')
             write('assets/translation.json', json.dumps({'zh': {'base': 'new'}}))
             write('.github/workflows/ci.yml', 'upstream')
             write('lib/main.dart', 'upstream')
+            write('.github/scripts/removed.mjs', 'upstream edit')
+            write('.github/scripts/new.mjs', 'upstream new file')
             upstream = commit('upstream')
             git('checkout', '-q', '-b', 'fork', base)
             write('README.md', '<div><h1>VeneraX</h1></div>\nPersonal fork guide')
@@ -65,6 +68,8 @@ class SyncTest(unittest.TestCase):
             write('.github/workflows/ci.yml', 'fork')
             if code_conflict:
                 write('lib/main.dart', 'fork code')
+            if deleted_workflow:
+                git('rm', '.github/scripts/removed.mjs')
             before = commit('fork')
             previous = Path.cwd()
             try:
@@ -83,6 +88,8 @@ class SyncTest(unittest.TestCase):
                         self.assertIn('Fork section', (root / 'README.md').read_text())
                         self.assertIn('Upstream guide', (root / 'README.md').read_text())
                         self.assertEqual((root / '.github/workflows/ci.yml').read_text(), 'fork')
+                        self.assertFalse((root / '.github/scripts/new.mjs').exists())
+                        self.assertEqual((root / '.github/scripts/removed.mjs').exists(), not deleted_workflow)
                         self.assertEqual(json.loads((root / 'assets/translation.json').read_text()),
                                          {'zh': {'base': 'new', 'fork': 'notice'}})
                         sync(upstream)
@@ -92,6 +99,9 @@ class SyncTest(unittest.TestCase):
 
     def test_real_merge_resolves_docs_translations_and_retains_ci(self):
         self.exercise_merge()
+
+    def test_upstream_edit_of_deleted_fork_workflow_is_removed(self):
+        self.exercise_merge(deleted_workflow=True)
 
     def test_real_code_conflict_aborts_without_overwriting_fork(self):
         self.exercise_merge(code_conflict=True)

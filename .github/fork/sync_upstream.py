@@ -61,6 +61,12 @@ def sync(upstream):
     try:
         git('merge', '--no-commit', '--no-ff', upstream, check=False)
         git('rev-parse', '--verify', 'MERGE_HEAD')
+        # restore cannot resolve modify/delete conflicts for paths absent in
+        # HEAD. Remove upstream-only paths first, then restore the fork tree.
+        fork_paths = set(git('ls-tree', '-r', '--name-only', 'HEAD', '--', '.github').splitlines())
+        merged_paths = set(git('ls-files', '--', '.github').splitlines())
+        for path in sorted(merged_paths - fork_paths):
+            git('rm', '-f', '--', path)
         git('restore', '--source=HEAD', '--staged', '--worktree', '--', '.github')
         for name, language in [('README.md', 'zh'), ('README_EN.md', 'en')]:
             fragment = Path(f'.github/fork/readme.{language}.md').read_text(encoding='utf-8')
