@@ -200,10 +200,10 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
     var customActive = custom != null && custom.component.isInstalled;
     var kind = TranslationModels.activeDetectorKind;
     var (kindLabel, hint) = switch (kind) {
-      'manga-panel' => ("manga-panel (RT-DETR)".tl, "Text blocks + panels".tl),
-      'balloon-seg' => ("Balloon segmentation (legacy)".tl, "Bubble masks".tl),
-      'manga-panel-balloon' => (
-        "manga-panel + balloon".tl,
+      'manga-panel' => ("manga-panel (YOLO26)".tl, "Text blocks + panels".tl),
+      'legacy-balloon' => ("ImageTrans Legacy (YOLOv4)".tl, "Original ImageTrans bubble detection".tl),
+      'manga-panel-legacy' => (
+        "manga-panel + Legacy".tl,
         "Text blocks + panels + bubble grouping".tl,
       ),
       _ => ("Built-in (PP-OCRv4 mobile)".tl, "Text line boxes".tl),
@@ -222,9 +222,9 @@ class _TranslationModelsPageState extends State<TranslationModelsPage> {
 
   Future<void> _pickDetectorKind(BuildContext context) async {
     const options = <(String, String)>[
-      ('balloon-seg', 'Balloon segmentation (legacy)'),
-      ('manga-panel', 'manga-panel (RT-DETR)'),
-      ('manga-panel-balloon', 'manga-panel + balloon'),
+      ('legacy-balloon', 'ImageTrans Legacy (YOLOv4)'),
+      ('manga-panel', 'manga-panel (YOLO26)'),
+      ('manga-panel-legacy', 'manga-panel + Legacy'),
       ('dbnet', 'PP-OCR (DBNet)'),
     ];
     var current = TranslationModels.activeDetectorKind;

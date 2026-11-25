@@ -32,3 +32,10 @@ https://github.com/Xitaoyou/VeneraX/releases/latest/download/altstore-source.jso
 
 - ONNX 依赖链单独静态链接，rhttp 等 FFI 插件保留动态 framework，修复更新后漫画源无法连接的问题。
 - 发布前检查 rhttp 动态库及 Rust 接口符号，缺失时停止发布，避免只编译成功却无法联网。
+
+### 漫画气泡检测修复
+
+- 删除旧 balloonseg 模型和选项，旧选择自动迁移到 AiNieePlus 使用的 ImageTrans 原版 Legacy（Scaled YOLOv4）。
+- 按原版权重及配置校验后转换并随包提供，使用原版 512 RGB 输入、0.20 置信度与 0.50 NMS。
+- panel 完整文字块不再按文字行强行合并；结合 Legacy 边界拆分跨气泡大框，并补充 panel 漏掉的气泡。
+- 已翻译页面保留原结果，需要重新翻译才应用新的检测。原版模型较大，安装包和模型内存占用会增加。

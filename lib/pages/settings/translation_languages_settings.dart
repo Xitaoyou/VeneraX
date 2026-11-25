@@ -661,9 +661,9 @@ class _DetectorEditorState extends State<_DetectorEditor> {
 
   static const _kinds = <(String, String)>[
     ('dbnet', 'PP-OCR (DBNet)'),
-    ('manga-panel', 'manga-panel (RT-DETR)'),
-    ('balloon-seg', 'Balloon segmentation (legacy)'),
-    ('manga-panel-balloon', 'manga-panel + balloon'),
+    ('manga-panel', 'manga-panel (YOLO26)'),
+    ('legacy-balloon', 'ImageTrans Legacy (YOLOv4)'),
+    ('manga-panel-legacy', 'manga-panel + Legacy'),
   ];
 
   @override
@@ -672,7 +672,8 @@ class _DetectorEditorState extends State<_DetectorEditor> {
     super.dispose();
   }
 
-  Future<void> _submit() async {    if (_kind == 'dbnet') {
+  Future<void> _submit() async {
+    if (_kind == 'dbnet') {
       var url = _url.text.trim();
       if (!TranslationSources.isValidUrl(url)) {
         context.showMessage(message: "Enter an http(s) link".tl);
@@ -688,7 +689,7 @@ class _DetectorEditorState extends State<_DetectorEditor> {
     }
     // Local import: gather the files the selected backend needs.
     var files = <(String, String)>[];
-    if (_kind == 'balloon-seg') {
+    if (_kind == 'legacy-balloon') {
       if (_balloonFile == null) {
         context.showMessage(message: "Choose the balloon model file".tl);
         return;
@@ -700,7 +701,7 @@ class _DetectorEditorState extends State<_DetectorEditor> {
         return;
       }
       files.add(('det.onnx', _panelFile!));
-      if (_kind == 'manga-panel-balloon') {
+      if (_kind == 'manga-panel-legacy') {
         if (_balloonFile == null) {
           context.showMessage(message: "Choose the balloon model file".tl);
           return;
@@ -714,20 +715,20 @@ class _DetectorEditorState extends State<_DetectorEditor> {
       model.component,
       files,
       verify: () async {
-        // The panel model and the segmentation model have different
+        // The panel model and the Legacy YOLOv4 model have different
         // contracts; check whichever files this kind carries.
-        if (_kind != 'balloon-seg') {
+        if (_kind != 'legacy-balloon') {
           await checkDetectionModel(
             model.component.filePath('det.onnx'),
             kind: 'manga-panel',
           );
         }
-        if (_kind == 'balloon-seg' || _kind == 'manga-panel-balloon') {
+        if (_kind == 'legacy-balloon' || _kind == 'manga-panel-legacy') {
           await checkDetectionModel(
-            _kind == 'balloon-seg'
+            _kind == 'legacy-balloon'
                 ? model.component.filePath('det.onnx')
                 : model.component.filePath('balloon.onnx'),
-            kind: 'balloon-seg',
+            kind: 'legacy-balloon',
           );
         }
       },
@@ -739,9 +740,8 @@ class _DetectorEditorState extends State<_DetectorEditor> {
     } else {
       setState(() => _checking = false);
       context.showMessage(
-        message: TranslationModelStore.instance
-                .stateOf(model.component)
-                .error ??
+        message:
+            TranslationModelStore.instance.stateOf(model.component).error ??
             "Import failed".tl,
       );
     }
@@ -765,7 +765,7 @@ class _DetectorEditorState extends State<_DetectorEditor> {
             var file = await selectFile(ext: ['onnx']);
             if (file == null) return;
             setState(() {
-              if (_kind == 'balloon-seg') {
+              if (_kind == 'legacy-balloon') {
                 _balloonFile = file.path;
               } else if (label.startsWith('Balloon')) {
                 _balloonFile = file.path;
@@ -816,8 +816,9 @@ class _DetectorEditorState extends State<_DetectorEditor> {
                     for (var p in _detectorPresets)
                       ActionChip(
                         label: Text("${p.$1} · ${p.$3} MB"),
-                        onPressed: () =>
-                            setState(() => _url.text = '$_rapidOcrBase/${p.$2}'),
+                        onPressed: () => setState(
+                          () => _url.text = '$_rapidOcrBase/${p.$2}',
+                        ),
                       ),
                   ],
                 ),
@@ -837,22 +838,22 @@ class _DetectorEditorState extends State<_DetectorEditor> {
                   style: ts.s12.copyWith(color: context.colorScheme.outline),
                 ),
               ] else ...[
-                if (_kind != 'balloon-seg')
+                if (_kind != 'legacy-balloon')
                   _pickRow("manga-panel model".tl, _panelFile),
-                if (_kind == 'manga-panel-balloon')
+                if (_kind == 'manga-panel-legacy')
                   _pickRow("Balloon model".tl, _balloonFile),
-                if (_kind == 'balloon-seg')
+                if (_kind == 'legacy-balloon')
                   _pickRow("Balloon model".tl, _balloonFile),
                 const SizedBox(height: 12),
                 Text(
-                  _kind == 'balloon-seg'
-                      ? "Import the balloon segmentation model (ImageTrans 'balloonseg.onnx', fp16). Balloon interiors group text into blocks and text regions become OCR inputs."
-                          .tl
-                      : _kind == 'manga-panel-balloon'
-                      ? "Import both models: the RT-DETR detector finds text blocks and panels (reading order), the balloon segmentation model groups text into bubbles. Recommended for Japanese manga."
-                          .tl
-                      : "Import the manga-panel RT-DETR model (ImageTrans 'models/manga-panel/model.onnx'). It detects text blocks and panels directly; panels drive the reading order."
-                          .tl,
+                  _kind == 'legacy-balloon'
+                      ? "Import the converted ImageTrans Legacy YOLOv4 ONNX model (512 RGB, three activated heads). The original balloonseg model is not supported."
+                            .tl
+                      : _kind == 'manga-panel-legacy'
+                      ? "Import both models: the YOLO26 detector finds text blocks and panels (reading order), the original Legacy YOLOv4 model supplies bubble boundaries. Recommended for Japanese manga."
+                            .tl
+                      : "Import the manga-panel YOLO26 model (ImageTrans 'models/manga-panel/model.onnx'). It detects text blocks and panels directly; panels drive the reading order."
+                            .tl,
                   style: ts.s12.copyWith(color: context.colorScheme.outline),
                 ),
               ],

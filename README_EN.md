@@ -20,6 +20,7 @@
 
 | Area | Behavior and compatibility |
 | --- | --- |
+| Bubble detection | Replaced balloonseg with original ImageTrans Legacy YOLOv4; preserve individual panel blocks and use bubble boundaries to split and recover detections. |
 | Comic export | Adds ZIP export. Local comic exports on iOS use the system share sheet for Save to Files, AirDrop and other apps; cancellation and failure are not counted as saved. |
 | Translation-library resume | Opens the matching comic detail page beneath the standard reader; downward dismissal returns to that detail page, preserving reading-mode and gesture policies. |
 | Pull down to dismiss the reader | Enabled on iOS for horizontal gallery and continuous reading, in both LTR and RTL directions. Vertical reading disables it silently. |

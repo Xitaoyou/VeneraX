@@ -99,6 +99,13 @@ jobs:
       - name: Use CocoaPods for native iOS dependencies
         run: flutter config --no-enable-swift-package-manager
       - run: sudo xcode-select --switch /Applications/Xcode_16.4.app
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Prepare original ImageTrans Legacy model
+        run: |
+          python -m pip install numpy==2.2.6 onnx==1.19.1
+          python tool/convert_legacy_balloon.py
       - run: flutter pub get
       - name: Analyze changed integration points
         run: >-
@@ -137,6 +144,9 @@ jobs:
           test/fork_translated_resume_test.dart
           test/export_task_test.dart
           test/pdf_export_failure_test.dart
+          test/legacy_balloon_detection_test.dart
+          test/bubble_detection_test.dart
+          test/translation_sources_test.dart
       - name: Verify update feed metadata
         run: python3 .github/fork/test_feed.py
       - name: Prepare verified ONNX native dependencies

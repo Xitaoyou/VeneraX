@@ -174,3 +174,17 @@ fork_export_share_test.dart verifies real ZIP/PDF/EPUB output, PDF Flate streams
 sharing lifetime, unique names, persistence, failure and dismissal.
 fork_translated_resume_test.dart exercises actual library menus, detail/reader
 routes and downward dismissal in both horizontal reading directions.
+
+## ImageTrans Legacy detector
+
+The old balloonseg backend and bundled asset are removed. The original Scaled
+YOLOv4 CFG and weights are SHA-256 pinned to AiNieePlus, converted reproducibly
+by `tool/convert_legacy_balloon.py` before iOS tests/builds, and included as a
+generated asset. The generated 281 MB binary stays out of Git. See
+`doc/legacy-balloon-model.md` for provenance and verification.
+
+Object detector blocks are not line clusters. Panel detections retain their
+ImageTrans resize contract, while original Legacy boundaries partition large
+blocks and supplement missing bubbles. Old bundled selections migrate; old
+custom segmentation profiles are rejected rather than loaded as YOLO. Existing
+stored translations are preserved and require an explicit retranslate.

@@ -78,9 +78,9 @@ class CustomSourceLanguage {
 /// A user-supplied text detection model replacing the built-in detector.
 /// Language independent. [kind] selects the inference backend:
 /// - 'dbnet': PP-OCR DBNet probability map (URL download or local import).
-/// - 'manga-panel': RT-DETR text/panel detector (local import).
-/// - 'balloon-seg': legacy balloon segmentation (local import).
-/// - 'manga-panel-balloon': RT-DETR plus the balloon segmentation model
+/// - 'manga-panel': YOLO26 text/panel detector (local import).
+/// - 'legacy-balloon': legacy Legacy YOLOv4 (local import).
+/// - 'manga-panel-legacy': YOLO26 plus the Legacy YOLOv4 model
 ///   (local import, two files).
 class CustomDetectorModel {
   const CustomDetectorModel({
@@ -92,11 +92,11 @@ class CustomDetectorModel {
   final String url;
   final int sizeBytes;
 
-  /// 'dbnet' | 'manga-panel' | 'balloon-seg' | 'manga-panel-balloon'.
+  /// 'dbnet' | 'manga-panel' | 'legacy-balloon' | 'manga-panel-legacy'.
   final String kind;
 
-  /// Whether this kind needs the balloon segmentation model as a second file.
-  bool get needsBalloonModel => kind == 'manga-panel-balloon';
+  /// Whether this kind needs the Legacy YOLOv4 model as a second file.
+  bool get needsBalloonModel => kind == 'manga-panel-legacy';
 
   ModelComponent get component => ModelComponent(
     id: 'detector_${modelHash('$kind\n$url')}',
@@ -118,7 +118,13 @@ class CustomDetectorModel {
     if (item is! Map) return null;
     var url = '${item['url'] ?? ''}'.trim();
     var kind = '${item['kind'] ?? 'dbnet'}';
-    const kinds = {'dbnet', 'manga-panel', 'balloon-seg', 'manga-panel-balloon'};
+    if (kind == 'balloon-seg' || kind == 'manga-panel-balloon') return null;
+    const kinds = {
+      'dbnet',
+      'manga-panel',
+      'legacy-balloon',
+      'manga-panel-legacy',
+    };
     if (!kinds.contains(kind)) kind = 'dbnet';
     // URL models must have a valid URL; imported models carry no URL.
     if (url.isNotEmpty && !TranslationSources.isValidUrl(url)) return null;

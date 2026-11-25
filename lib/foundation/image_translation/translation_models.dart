@@ -93,25 +93,19 @@ abstract class TranslationModels {
     id: 'ocr_ja',
     approxSizeBytes: 119000000,
     files: [
-      ModelFile(
-        'encoder.onnx',
-        ['{hf}/mayocream/manga-ocr-onnx/resolve/main/encoder_model.onnx'],
-        asset: 'assets/translation_models/mangaocr/encoder.onnx',
-      ),
-      ModelFile(
-        'decoder.onnx',
-        ['{hf}/mayocream/manga-ocr-onnx/resolve/main/decoder_model.onnx'],
-        asset: 'assets/translation_models/mangaocr/decoder.onnx',
-      ),
-      ModelFile(
-        'vocab.txt',
-        ['{hf}/mayocream/manga-ocr-onnx/resolve/main/vocab.txt'],
-        asset: 'assets/translation_models/mangaocr/vocab.txt',
-      ),
+      ModelFile('encoder.onnx', [
+        '{hf}/mayocream/manga-ocr-onnx/resolve/main/encoder_model.onnx',
+      ], asset: 'assets/translation_models/mangaocr/encoder.onnx'),
+      ModelFile('decoder.onnx', [
+        '{hf}/mayocream/manga-ocr-onnx/resolve/main/decoder_model.onnx',
+      ], asset: 'assets/translation_models/mangaocr/decoder.onnx'),
+      ModelFile('vocab.txt', [
+        '{hf}/mayocream/manga-ocr-onnx/resolve/main/vocab.txt',
+      ], asset: 'assets/translation_models/mangaocr/vocab.txt'),
     ],
   );
 
-  /// Bundled RT-DETR text/panel detector (ImageTrans manga-panel). Class 0 =
+  /// Bundled YOLO26 text/panel detector (ImageTrans manga-panel). Class 0 =
   /// panel, 1 = text block; panels drive the reading order.
   static const mangaPanel = ModelComponent(
     id: 'detector_manga_panel',
@@ -126,17 +120,17 @@ abstract class TranslationModels {
     ],
   );
 
-  /// Bundled legacy balloon segmentation (ImageTrans balloonseg, fp16).
-  /// Balloon interiors group text into blocks; the text channel feeds OCR.
-  static const balloonSeg = ModelComponent(
-    id: 'detector_balloon_seg',
-    approxSizeBytes: 1900000,
+  /// Original ImageTrans Legacy Scaled YOLOv4, converted without quantization.
+  /// One detected bubble is one OCR block.
+  static const legacyBalloon = ModelComponent(
+    id: 'detector_legacy_balloon',
+    approxSizeBytes: 281479899,
     marker: true,
     files: [
       ModelFile(
         'det.onnx',
         [],
-        asset: 'assets/translation_models/balloonseg/model.onnx',
+        asset: 'assets/translation_models/legacy-balloon/model.onnx',
       ),
     ],
   );
@@ -207,7 +201,7 @@ abstract class TranslationModels {
   static const all = [
     detector,
     mangaPanel,
-    balloonSeg,
+    legacyBalloon,
     ocrJa,
     ocrZhV5,
     ocrZh,
@@ -238,9 +232,9 @@ abstract class TranslationModels {
     if (custom != null && custom.isInstalled) return custom;
     return switch (activeDetectorKind) {
       'manga-panel' => mangaPanel.isInstalled ? mangaPanel : detector,
-      'balloon-seg' => balloonSeg.isInstalled ? balloonSeg : detector,
-      'manga-panel-balloon' =>
-        mangaPanel.isInstalled && balloonSeg.isInstalled
+      'legacy-balloon' => legacyBalloon.isInstalled ? legacyBalloon : detector,
+      'manga-panel-legacy' =>
+        mangaPanel.isInstalled && legacyBalloon.isInstalled
             ? mangaPanel
             : detector,
       _ => detector,
@@ -248,23 +242,24 @@ abstract class TranslationModels {
   }
 
   /// The detection backend of [activeDetector]: 'dbnet', 'manga-panel',
-  /// 'balloon-seg' or 'manga-panel-balloon'. A user-imported detector wins
-  /// over the bundled selection; the bundled default is the legacy balloon
-  /// segmentation, so a fresh install translates out of the box with
+  /// 'legacy-balloon' or 'manga-panel-legacy'. A user-imported detector wins
+  /// over the bundled selection; the bundled default is the legacy Legacy YOLOv4, so a fresh install translates out of the box with
   /// bubble detection + manga-ocr.
   static String get activeDetectorKind {
     var custom = TranslationSources.detector;
     if (custom != null && custom.component.isInstalled) return custom.kind;
     var kind = appdata.settings['imageTranslationDetectorKind'];
+    if (kind == 'balloon-seg') return 'legacy-balloon';
+    if (kind == 'manga-panel-balloon') return 'manga-panel-legacy';
     if (kind is String && _bundledKinds.contains(kind)) return kind;
-    return 'balloon-seg';
+    return 'legacy-balloon';
   }
 
   static const _bundledKinds = {
     'dbnet',
     'manga-panel',
-    'balloon-seg',
-    'manga-panel-balloon',
+    'legacy-balloon',
+    'manga-panel-legacy',
   };
 
   /// Sets the bundled detector kind selection.
@@ -298,19 +293,22 @@ abstract class TranslationModels {
     var jaComponent = TranslationSources.activeJaOcr;
     var hasJa = jaComponent.isInstalled;
     var detectorKind = activeDetectorKind;
-    var detectorPath = activeDetector.filePath('det.onnx');
-    // The combined backend carries the balloon segmentation model as its
+    final selectedDetector = activeDetector;
+    var detectorPath = selectedDetector.filePath('det.onnx');
+    if (identical(selectedDetector, detector)) detectorKind = 'dbnet';
+    // The combined backend carries the Legacy YOLOv4 model as its
     // second file; a user-imported combined detector stores it as
     // balloon.onnx, the bundled one lives in its own component directory.
     String? balloonPath;
-    if (detectorKind == 'manga-panel-balloon') {
+    if (detectorKind == 'manga-panel-legacy' || detectorKind == 'manga-panel') {
       var custom = TranslationSources.detector;
-      if (custom != null && custom.component.isInstalled) {
+      if (custom != null &&
+          custom.needsBalloonModel &&
+          custom.component.isInstalled) {
         balloonPath = custom.component.filePath('balloon.onnx');
-      } else if (balloonSeg.isInstalled) {
-        balloonPath = balloonSeg.filePath('det.onnx');
+      } else if (legacyBalloon.isInstalled) {
+        balloonPath = legacyBalloon.filePath('det.onnx');
       }
-      if (balloonPath == null) detectorPath = detector.filePath('det.onnx');
     }
     return WorkerModelPaths(
       detector: detectorPath,
@@ -436,13 +434,19 @@ class TranslationModelStore with ChangeNotifier {
   final _deleting = <String>{};
 
   /// Copies the app-bundled model files (manga-ocr fp16, manga-panel,
-  /// balloonseg) into their component directories on first launch, so the
+  /// Legacy YOLOv4) into their component directories on first launch, so the
   /// AI translation button works out of the box: legacy balloon detection +
   /// manga-ocr recognition, zero downloads. Already-extracted files are left
   /// alone; a failed copy logs and moves on (the download URLs remain the
   /// fallback for the OCR model).
   Future<void> extractBundledModels() async {
     var changed = false;
+    final obsolete = Directory(
+      FilePath.join(App.dataPath, 'translation_models', 'detector_balloon_seg'),
+    );
+    if (obsolete.existsSync()) {
+      await obsolete.deleteIgnoreError(recursive: true);
+    }
     for (var component in TranslationModels.all) {
       var hasBundled = false;
       for (var file in component.files) {
@@ -673,8 +677,7 @@ class TranslationModelStore with ChangeNotifier {
 
   /// Imports user-supplied local model [files] into [component]'s directory,
   /// verifies, and marks the component installed. The local import path for
-  /// models that are not published anywhere (manga-panel, balloon
-  /// segmentation, an alternative manga-ocr conversion).
+  /// models that are not published anywhere (manga-panel, Legacy YOLOv4, an alternative manga-ocr conversion).
   Future<void> importFiles(
     ModelComponent component,
     List<(String name, String sourcePath)> files, {

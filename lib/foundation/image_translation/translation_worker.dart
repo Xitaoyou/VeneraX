@@ -1,3 +1,4 @@
+import 'legacy_balloon_detection.dart';
 import 'dart:async';
 import 'dart:isolate';
 import 'dart:math' as math;
@@ -33,10 +34,10 @@ class WorkerModelPaths {
 
   /// Which detection backend [detector] drives:
   /// - 'dbnet': PP-OCR DBNet probability map (built-in).
-  /// - 'manga-panel': RT-DETR object detector, [x1,y1,x2,y2,conf,class] rows;
+  /// - 'manga-panel': YOLO26 object detector, [x1,y1,x2,y2,conf,class] rows;
   ///   class 0 = panel, 1 = text block.
-  /// - 'balloon-seg': legacy balloon segmentation (fp16, 3-channel logits).
-  /// - 'manga-panel-balloon': manga-panel for text/panels plus the balloon
+  /// - 'legacy-balloon': original ImageTrans Legacy YOLOv4.
+  /// - 'manga-panel-legacy': manga-panel for text/panels plus the balloon
   ///   segmentation model in [balloonModel] for grouping.
   final String detectorKind;
 
@@ -93,12 +94,15 @@ Future<void> checkRecognitionModel(String model, String dict, int height) {
       throw const ModelCheckException(ModelCheckFailure.cannotRun);
     }
     try {
-      output = session.run({
-        session.inputNames.first: OrtInput.float32(
-          Float32List(3 * height * 160),
-          [1, 3, height, 160],
-        ),
-      }).values.first;
+      output = session
+          .run({
+            session.inputNames.first: OrtInput.float32(
+              Float32List(3 * height * 160),
+              [1, 3, height, 160],
+            ),
+          })
+          .values
+          .first;
     } catch (_) {
       throw const ModelCheckException(ModelCheckFailure.cannotRun);
     } finally {
@@ -120,8 +124,8 @@ Future<void> checkRecognitionModel(String model, String dict, int height) {
 }
 
 /// Runs a detection model once and checks it matches the expectations of
-/// [kind]: a DBNet probability map ('dbnet'), an RT-DETR detection head
-/// ('manga-panel'), or the fp16 balloon segmentation logits ('balloon-seg').
+/// [kind]: a DBNet probability map ('dbnet'), an YOLO26 detection head
+/// ('manga-panel'), or the original ImageTrans Legacy heads ('legacy-balloon').
 Future<void> checkDetectionModel(String model, {String kind = 'dbnet'}) {
   return Isolate.run(() {
     OrtFfiSession session;
@@ -134,36 +138,35 @@ Future<void> checkDetectionModel(String model, {String kind = 'dbnet'}) {
     try {
       switch (kind) {
         case 'manga-panel':
-          output = session.run({
-            session.inputNames.first: OrtInput.float32(
-              Float32List(3 * 640 * 640),
-              const [1, 3, 640, 640],
-            ),
-          }).values.first;
+          output = session
+              .run({
+                session.inputNames.first: OrtInput.float32(
+                  Float32List(3 * 640 * 640),
+                  const [1, 3, 640, 640],
+                ),
+              })
+              .values
+              .first;
           var s = output.shape;
-          // RT-DETR head: [1, 300, 6] rows of [x1,y1,x2,y2,conf,class].
+          // YOLO26 head: [1, 300, 6] rows of [x1,y1,x2,y2,conf,class].
           if (s.length != 3 || s[2] != 6) {
             throw const ModelCheckException(ModelCheckFailure.notDetector);
           }
-        case 'balloon-seg':
-          output = session.run({
-            session.inputNames.first: OrtInput.float16(
-              Uint16List(1024 * 768),
-              const [1, 1024, 768, 1],
-            ),
-          }, fp16Outputs: true).values.first;
-          var s = output.shape;
-          // Segmentation head: [1, 1024, 768, 3] logits.
-          if (s.length != 4 || s[1] != 1024 || s[2] != 768 || s[3] != 3) {
-            throw const ModelCheckException(ModelCheckFailure.notDetector);
-          }
+        case 'legacy-balloon':
+          runLegacyBalloonDetector(
+            session,
+            RgbaImage(512, 512, Uint8List(512 * 512 * 4)),
+          );
         default:
-          output = session.run({
-            session.inputNames.first: OrtInput.float32(
-              Float32List(3 * 64 * 64),
-              const [1, 3, 64, 64],
-            ),
-          }).values.first;
+          output = session
+              .run({
+                session.inputNames.first: OrtInput.float32(
+                  Float32List(3 * 64 * 64),
+                  const [1, 3, 64, 64],
+                ),
+              })
+              .values
+              .first;
           var s = output.shape;
           if (s.length != 4 || s[1] != 1 || s[2] != 64 || s[3] != 64) {
             throw const ModelCheckException(ModelCheckFailure.notDetector);
@@ -193,27 +196,33 @@ Future<void> checkJaOcrModel(String encoder, String decoder, String vocab) {
     }
     OrtFfiSession? dec;
     try {
-      hidden = enc.run({
-        enc.inputNames.first: OrtInput.float32(
-          Float32List(3 * 224 * 224),
-          const [1, 3, 224, 224],
-        ),
-      }).values.first;
+      hidden = enc
+          .run({
+            enc.inputNames.first: OrtInput.float32(
+              Float32List(3 * 224 * 224),
+              const [1, 3, 224, 224],
+            ),
+          })
+          .values
+          .first;
       if (hidden.shape.length != 3) {
         throw const ModelCheckException(ModelCheckFailure.notRecognizer);
       }
       dec = OrtFfiSession.open(decoder, intraOpThreads: 1);
       var logits = dec
-          .run({
-            'input_ids': OrtInput.int64(
-              Int64List.fromList([2]),
-              const [1, 1],
-            ),
-            'encoder_hidden_states': OrtInput.float32(
-              hidden.data,
-              hidden.shape,
-            ),
-          }, requestedOutputs: [dec.outputNames.first])
+          .run(
+            {
+              'input_ids': OrtInput.int64(Int64List.fromList([2]), const [
+                1,
+                1,
+              ]),
+              'encoder_hidden_states': OrtInput.float32(
+                hidden.data,
+                hidden.shape,
+              ),
+            },
+            requestedOutputs: [dec.outputNames.first],
+          )
           .values
           .first;
       var classes = logits.shape.last;
@@ -656,7 +665,7 @@ class _WorkerState {
       req.pixels.materialize().asUint8List(),
     );
     var det = _detect(image, req.paths);
-    if (det.textBoxes.isEmpty) return const [];
+    if (det.textBoxes.isEmpty && det.balloons.isEmpty) return const [];
     var clusters = _groupTextRegions(det, image.width, image.height);
     _sortClusters(clusters, det.panels, rightToLeft: _isRightToLeft(req));
     const maxBlocks = 32;
@@ -734,13 +743,9 @@ class _WorkerState {
   /// the box height.
   int _medianLineHeight(List<IntRect> lines) {
     if (lines.isEmpty) return 0;
-    var vertical = lines
-        .where((l) => l.height > l.width * 1.3)
-        .length;
+    var vertical = lines.where((l) => l.height > l.width * 1.3).length;
     var useWidth = vertical > lines.length / 2;
-    var sizes = [
-      for (var l in lines) useWidth ? l.width : l.height,
-    ]..sort();
+    var sizes = [for (var l in lines) useWidth ? l.width : l.height]..sort();
     return sizes[sizes.length ~/ 2];
   }
 
@@ -815,7 +820,7 @@ class _WorkerState {
   _PageDetection _detect(RgbaImage image, WorkerModelPaths paths) {
     switch (paths.detectorKind) {
       case 'manga-panel':
-      case 'manga-panel-balloon':
+      case 'manga-panel-legacy':
         var detections = runMangaPanelDetector(_session(paths.detector), image);
         var text = <IntRect>[
           for (var d in detections)
@@ -828,22 +833,21 @@ class _WorkerState {
         var balloons = <IntRect>[];
         var balloonPath = paths.balloonModel;
         if (balloonPath != null) {
-          var seg = runBalloonSegmenter(_session(balloonPath), image);
-          balloons = seg.balloons;
-          // The segmenter catches bubble text the detector missed; adopt
-          // those regions that do not already overlap a detected box.
-          for (var t in seg.texts) {
-            if (!text.any((b) => _iou(b, t) > 0.3)) {
-              text.add(t);
-            }
-          }
+          balloons = runLegacyBalloonDetector(_session(balloonPath), image);
         }
-        return _PageDetection(text, panels, balloons);
-      case 'balloon-seg':
-        var seg = runBalloonSegmenter(_session(paths.detector), image);
-        return _PageDetection(seg.texts, const [], seg.balloons);
+        return _PageDetection(text, panels, balloons, objectBoxes: true);
+      case 'legacy-balloon':
+        final bubbles = runLegacyBalloonDetector(
+          _session(paths.detector),
+          image,
+        );
+        return _PageDetection(bubbles, const [], const [], objectBoxes: true);
       default:
-        return _PageDetection(_detectBoxesDbNet(image, paths), const [], const []);
+        return _PageDetection(
+          _detectBoxesDbNet(image, paths),
+          const [],
+          const [],
+        );
     }
   }
 
@@ -854,83 +858,10 @@ class _WorkerState {
     int width,
     int height,
   ) {
-    if (det.balloons.isNotEmpty) {
-      return _groupByBalloons(det.textBoxes, det.balloons, width, height);
-    }
-    if (det.panels.isNotEmpty) {
-      return _groupWithinPanels(det.textBoxes, det.panels, width, height);
+    if (det.objectBoxes) {
+      return groupDetectedBubbles(det.textBoxes, det.balloons);
     }
     return clusterOcrBoxes(det.textBoxes, width, height);
-  }
-
-  /// One balloon = one block: every text box whose center falls inside a
-  /// balloon joins it; leftovers cluster among themselves.
-  List<List<IntRect>> _groupByBalloons(
-    List<IntRect> texts,
-    List<IntRect> balloons,
-    int width,
-    int height,
-  ) {
-    var clusters = <List<IntRect>>[];
-    var assigned = List<bool>.filled(texts.length, false);
-    for (var balloon in balloons) {
-      var inside = <IntRect>[];
-      for (var i = 0; i < texts.length; i++) {
-        if (assigned[i]) continue;
-        var t = texts[i];
-        var cx = (t.left + t.right) / 2;
-        var cy = (t.top + t.bottom) / 2;
-        if (cx >= balloon.left &&
-            cx <= balloon.right &&
-            cy >= balloon.top &&
-            cy <= balloon.bottom) {
-          inside.add(t);
-          assigned[i] = true;
-        }
-      }
-      if (inside.isNotEmpty) clusters.add(inside);
-    }
-    var rest = [
-      for (var i = 0; i < texts.length; i++)
-        if (!assigned[i]) texts[i],
-    ];
-    if (rest.isNotEmpty) clusters.addAll(clusterOcrBoxes(rest, width, height));
-    return clusters;
-  }
-
-  /// Text boxes sharing a panel cluster together (then heuristically within
-  /// the panel); text outside any panel clusters on its own.
-  List<List<IntRect>> _groupWithinPanels(
-    List<IntRect> texts,
-    List<IntRect> panels,
-    int width,
-    int height,
-  ) {
-    var groups = <int, List<IntRect>>{};
-    var rest = <IntRect>[];
-    for (var t in texts) {
-      var cx = (t.left + t.right) / 2;
-      var cy = (t.top + t.bottom) / 2;
-      int? panel;
-      for (var i = 0; i < panels.length; i++) {
-        var p = panels[i];
-        if (cx >= p.left && cx <= p.right && cy >= p.top && cy <= p.bottom) {
-          panel = i;
-          break;
-        }
-      }
-      if (panel == null) {
-        rest.add(t);
-      } else {
-        groups.putIfAbsent(panel, () => []).add(t);
-      }
-    }
-    var clusters = <List<IntRect>>[];
-    for (var group in groups.values) {
-      clusters.addAll(clusterOcrBoxes(group, width, height));
-    }
-    if (rest.isNotEmpty) clusters.addAll(clusterOcrBoxes(rest, width, height));
-    return clusters;
   }
 
   /// Manga languages read right-to-left; western comics left-to-right.
@@ -950,8 +881,11 @@ class _WorkerState {
   }) {
     if (panels.isEmpty) {
       clusters.sort(
-        (a, b) =>
-            compareMangaBlocks(_boundsOf(a), _boundsOf(b), rightToLeft: rightToLeft),
+        (a, b) => compareMangaBlocks(
+          _boundsOf(a),
+          _boundsOf(b),
+          rightToLeft: rightToLeft,
+        ),
       );
       return;
     }
@@ -1113,9 +1047,8 @@ class _WorkerState {
     var vertical = lines.any(_isVerticalLine);
     var sorted = [...lines]
       ..sort(
-        (a, b) => vertical
-            ? b.right.compareTo(a.right)
-            : a.top.compareTo(b.top),
+        (a, b) =>
+            vertical ? b.right.compareTo(a.right) : a.top.compareTo(b.top),
       );
     var parts = <String>[];
     for (var line in sorted) {
@@ -1193,7 +1126,14 @@ class _DetInput {
 
 /// Detection results of one page before grouping.
 class _PageDetection {
-  _PageDetection(this.textBoxes, this.panels, this.balloons);
+  _PageDetection(
+    this.textBoxes,
+    this.panels,
+    this.balloons, {
+    this.objectBoxes = false,
+  });
+
+  final bool objectBoxes;
 
   final List<IntRect> textBoxes;
   final List<IntRect> panels;
